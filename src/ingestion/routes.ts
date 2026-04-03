@@ -26,6 +26,100 @@ const youtubeMetaSchema = z.object({
 });
 
 export async function ingestionRoutes(app: FastifyInstance) {
+  // Agent endpoints — local agent polls for pending downloads and uploads results
+
+  // List videos waiting for local download
+  app.get('/api/v1/agent/pending', {
+    preHandler: [authMiddleware],
+  }, async (request) => {
+    const db = (await import('../db/client.js')).getDb();
+    const { assets } = await import('../db/schema.js');
+    const { eq, and } = await import('drizzle-orm');
+    return db.select().from(assets)
+      .where(and(
+        eq(assets.userId, request.userId!),
+        eq(assets.processingStatus, 'pending_download'),
+      ));
+  });
+
+  // Agent uploads downloaded audio for an asset
+  app.post('/api/v1/agent/upload/:assetId', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const { assetId } = request.params as { assetId: string };
+    const data = await request.file();
+    if (!data) throw new ValidationError('No file provided');
+
+    const db = (await import('../db/client.js')).getDb();
+    const { assets } = await import('../db/schema.js');
+    const { eq, and } = await import('drizzle-orm');
+
+    // Verify asset belongs to user and is pending download
+    const rows = await db.select().from(assets)
+      .where(and(eq(assets.id, assetId), eq(assets.userId, request.userId!)))
+      .limit(1);
+    if (rows.length === 0) throw new (await import('../shared/errors.js')).NotFoundError('Asset');
+    const asset = rows[0];
+    if (asset.processingStatus !== 'pending_download') {
+      throw new ValidationError('Asset is not pending download');
+    }
+
+    const buffer = await data.toBuffer();
+
+    // Parse metadata from multipart fields
+    const getField = (name: string) => {
+      const f = data.fields[name];
+      return f && 'value' in f ? f.value as string : undefined;
+    };
+    const title = getField('title');
+    const description = getField('description');
+    const duration = getField('duration');
+    const thumbnail = getField('thumbnail');
+
+    // Upload to storage
+    const { uploadFile } = await import('../publishing/storage.js');
+    const storageKey = `assets/${request.userId}/${assetId}/${data.filename || 'audio.mp3'}`;
+    await uploadFile(storageKey, buffer, data.mimetype);
+
+    // Update asset — mark as pending (ready for server-side processing)
+    await db.update(assets)
+      .set({
+        storageKey,
+        originalFilename: data.filename,
+        mimeType: data.mimetype,
+        fileSizeBytes: buffer.length,
+        processingStatus: 'pending',
+        updatedAt: new Date(),
+      })
+      .where(eq(assets.id, assetId));
+
+    // Update episode with metadata from YouTube
+    const { episodes } = await import('../db/schema.js');
+    if (title || description || duration || thumbnail) {
+      const linkedEps = await db.select().from(episodes)
+        .where(eq(episodes.assetId, assetId));
+      for (const ep of linkedEps) {
+        await db.update(episodes).set({
+          ...(title && { title }),
+          ...(description && { description }),
+          ...(duration && { durationSeconds: Math.round(parseFloat(duration)) }),
+          ...(thumbnail && { imageUrl: thumbnail }),
+          updatedAt: new Date(),
+        }).where(eq(episodes.id, ep.id));
+      }
+    }
+
+    // Queue server-side processing (transcode + normalize)
+    const { enqueueProcessingJob } = await import('../processing/jobs.js');
+    await enqueueProcessingJob({
+      assetId,
+      userId: request.userId!,
+      targetFormat: 'mp3',
+    });
+
+    return reply.status(200).send({ ok: true, status: 'processing' });
+  });
+
   // Upload YouTube cookies for authenticated downloads
   app.post('/api/v1/youtube/cookies', {
     preHandler: [authMiddleware],

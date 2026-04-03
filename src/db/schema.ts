@@ -50,7 +50,7 @@ export const assets = pgTable('assets', {
   checksumSha256: text('checksum_sha256'),
   metadata: jsonb('metadata').$type<{ duration?: number; bitrate?: number; sampleRate?: number; channels?: number; codec?: string }>(),
   processingStatus: text('processing_status', {
-    enum: ['pending', 'processing', 'completed', 'failed'],
+    enum: ['pending_download', 'pending', 'processing', 'completed', 'failed'],
   }).notNull().default('pending'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

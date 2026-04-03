@@ -3,7 +3,6 @@ import { assets, episodes, feeds } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
 import { extractVideoId } from '../processing/youtube-dl.js';
-import { enqueueProcessingJob } from '../processing/jobs.js';
 import { createChildLogger } from '../shared/logger.js';
 import { ValidationError, NotFoundError } from '../shared/errors.js';
 
@@ -39,16 +38,16 @@ export async function addYouTubeVideo(params: {
     throw new ValidationError(`Video ${videoId} has already been added`);
   }
 
-  // Create asset record (pending processing)
+  // Create asset record — pending_download means local agent needs to download it
   const assetId = uuid();
   const [asset] = await db.insert(assets).values({
     id: assetId,
     userId: params.userId,
-    licenseId: null as any, // Personal use — no license required
+    licenseId: null as any,
     sourceType: 'stream_url',
     youtubeVideoId: videoId,
     streamUrl: `https://www.youtube.com/watch?v=${videoId}`,
-    processingStatus: 'pending',
+    processingStatus: 'pending_download',
   }).returning();
 
   // Create draft episode linked to this asset
@@ -58,26 +57,19 @@ export async function addYouTubeVideo(params: {
     id: episodeId,
     feedId: feed.id,
     assetId: assetId,
-    title: `YouTube video ${videoId}`, // Updated with real title after download
-    description: 'Processing...', // Updated after download
+    title: `YouTube video ${videoId}`,
+    description: 'Waiting for download...',
     guid,
     status: 'draft',
     episodeType: 'full',
   }).returning();
 
-  // Queue background download + processing
-  await enqueueProcessingJob({
-    assetId,
-    userId: params.userId,
-    targetFormat: 'mp3',
-  });
-
-  log.info({ videoId, assetId, episodeId, feedId: feed.id }, 'YouTube video queued for processing');
+  log.info({ videoId, assetId, episodeId, feedId: feed.id }, 'YouTube video awaiting local download');
 
   return {
     videoId,
     assetId,
     episodeId,
-    status: 'queued',
+    status: 'pending_download',
   };
 }
