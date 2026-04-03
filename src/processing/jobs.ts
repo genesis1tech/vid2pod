@@ -6,7 +6,6 @@ import { eq } from 'drizzle-orm';
 import { extractMetadata } from './metadata-extractor.js';
 import { transcode } from './transcoder.js';
 import { normalize } from './normalizer.js';
-import { downloadAudio } from './youtube-dl.js';
 import { uploadFile, uploadToPodcastBucket, getSignedDownloadUrl } from '../publishing/storage.js';
 import { validateLicense } from '../licensing/service.js';
 import { createChildLogger } from '../shared/logger.js';
@@ -64,45 +63,8 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
   try {
     let inputPath: string;
 
-    // YouTube video — download audio via yt-dlp
-    if (asset.youtubeVideoId) {
-      const ytResult = await downloadAudio(asset.youtubeVideoId);
-      inputPath = ytResult.audioPath;
-      workDir = ytResult.workDir;
-
-      // Update asset and episode with real metadata from YouTube
-      await db.update(assets)
-        .set({
-          originalFilename: `${asset.youtubeVideoId}.mp3`,
-          mimeType: 'audio/mpeg',
-          updatedAt: new Date(),
-        })
-        .where(eq(assets.id, asset.id));
-
-      // Update linked episode title/description
-      const linkedEpisodes = await db.select().from(episodes)
-        .where(eq(episodes.assetId, asset.id));
-
-      for (const ep of linkedEpisodes) {
-        await db.update(episodes)
-          .set({
-            title: ytResult.metadata.title,
-            description: ytResult.metadata.description || ytResult.metadata.title,
-            durationSeconds: ytResult.metadata.duration ? Math.round(ytResult.metadata.duration) : null,
-            imageUrl: ytResult.metadata.thumbnail,
-            updatedAt: new Date(),
-          })
-          .where(eq(episodes.id, ep.id));
-      }
-    } else if (asset.sourceType === 'stream_url' && asset.streamUrl) {
-      workDir = join(tmpdir(), `vid2pod-${asset.id}`);
-      await mkdir(workDir, { recursive: true });
-      const response = await fetch(asset.streamUrl);
-      if (!response.ok) throw new Error(`Failed to fetch stream: ${response.status}`);
-      const buffer = Buffer.from(await response.arrayBuffer());
-      inputPath = join(workDir, `input${asset.originalFilename ? '.' + asset.originalFilename.split('.').pop() : '.mp3'}`);
-      await writeFile(inputPath, buffer);
-    } else if (asset.storageKey) {
+    // Download source audio from S3 (agent-uploaded or direct upload)
+    if (asset.storageKey) {
       workDir = join(tmpdir(), `vid2pod-${asset.id}`);
       await mkdir(workDir, { recursive: true });
       const { getFile } = await import('../publishing/storage.js');
@@ -114,8 +76,16 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
       const buffer = Buffer.concat(chunks);
       inputPath = join(workDir, asset.originalFilename || 'input.mp3');
       await writeFile(inputPath, buffer);
+    } else if (asset.sourceType === 'stream_url' && asset.streamUrl) {
+      workDir = join(tmpdir(), `vid2pod-${asset.id}`);
+      await mkdir(workDir, { recursive: true });
+      const response = await fetch(asset.streamUrl);
+      if (!response.ok) throw new Error(`Failed to fetch stream: ${response.status}`);
+      const buffer = Buffer.from(await response.arrayBuffer());
+      inputPath = join(workDir, `input${asset.originalFilename ? '.' + asset.originalFilename.split('.').pop() : '.mp3'}`);
+      await writeFile(inputPath, buffer);
     } else {
-      throw new Error('Asset has no YouTube video ID, storage key, or stream URL');
+      throw new Error('Asset has no storage key or stream URL');
     }
 
     const meta = await extractMetadata(inputPath);
