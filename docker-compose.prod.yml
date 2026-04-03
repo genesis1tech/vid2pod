@@ -25,30 +25,6 @@ services:
       POLL_INTERVAL_MS: "60000"
     restart: unless-stopped
 
-  worker:
-    build: .
-    command: node dist/processing/worker.js
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://vid2pod:vid2pod@postgres:5432/vid2pod
-      REDIS_URL: redis://redis:6379
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-minioadmin}
-      S3_SECRET_KEY: ${S3_SECRET_KEY:-minioadmin}
-      S3_BUCKET: vid2pod-media
-      S3_PODCAST_BUCKET: vid2pod-podcasts
-      S3_REGION: us-east-1
-      JWT_SECRET: ${JWT_SECRET}
-      BASE_URL: https://vid2pod.g1tech.cloud
-      NODE_ENV: production
-    restart: unless-stopped
-
   postgres:
     image: postgres:16-alpine
     environment:
@@ -85,7 +61,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # Init container to create S3 buckets and set lifecycle
   minio-init:
     image: minio/mc
     depends_on:
@@ -96,7 +71,7 @@ services:
       mc alias set local http://minio:9000 $${MINIO_ROOT_USER:-minioadmin} $${MINIO_ROOT_PASSWORD:-minioadmin};
       mc mb --ignore-existing local/vid2pod-media;
       mc mb --ignore-existing local/vid2pod-podcasts;
-      mc ilm rule add local/vid2pod-podcasts --prefix 'processed/' --expire-days 14;
+      mc ilm rule add local/vid2pod-podcasts --prefix 'processed/' --expire-days 14 || true;
       echo 'Buckets and lifecycle configured';
       "
     environment:
