@@ -44,8 +44,8 @@ export async function downloadAudio(videoId: string): Promise<YtDlpResult> {
 
   log.info({ videoId, workDir }, 'Starting YouTube audio download');
 
-  // Download audio-only, best quality, convert to mp3
-  await execFileAsync('yt-dlp', [
+  // Build yt-dlp args
+  const args = [
     '--extract-audio',
     '--audio-format', 'mp3',
     '--audio-quality', '0',
@@ -54,8 +54,24 @@ export async function downloadAudio(videoId: string): Promise<YtDlpResult> {
     '--no-playlist',
     '--no-overwrites',
     '--js-runtimes', 'node',
-    `https://www.youtube.com/watch?v=${videoId}`,
-  ], {
+    '--extractor-args', 'youtube:player_client=mediaconnect',
+  ];
+
+  // Use cookies file if available (for authenticated downloads)
+  const cookiesPath = join(process.cwd(), 'cookies.txt');
+  try {
+    const { access } = await import('fs/promises');
+    await access(cookiesPath);
+    args.push('--cookies', cookiesPath);
+    log.info('Using cookies.txt for YouTube authentication');
+  } catch {
+    // No cookies file, proceed without
+  }
+
+  args.push(`https://www.youtube.com/watch?v=${videoId}`);
+
+  // Download audio-only, best quality, convert to mp3
+  await execFileAsync('yt-dlp', args, {
     cwd: workDir,
     timeout: 300_000, // 5 min timeout
   });

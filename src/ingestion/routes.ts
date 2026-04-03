@@ -10,6 +10,10 @@ const addVideoSchema = z.object({
   url: z.string().url(),
 });
 
+const cookiesSchema = z.object({
+  cookies: z.string().min(1),
+});
+
 const addStreamSchema = z.object({
   licenseId: z.string().uuid(),
   streamUrl: z.string().url(),
@@ -22,6 +26,18 @@ const youtubeMetaSchema = z.object({
 });
 
 export async function ingestionRoutes(app: FastifyInstance) {
+  // Upload YouTube cookies for authenticated downloads
+  app.post('/api/v1/youtube/cookies', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const body = cookiesSchema.parse(request.body);
+    const { writeFile } = await import('fs/promises');
+    const { join } = await import('path');
+    const cookiesPath = join(process.cwd(), 'cookies.txt');
+    await writeFile(cookiesPath, body.cookies, 'utf-8');
+    return reply.status(200).send({ ok: true, message: 'YouTube cookies saved' });
+  });
+
   // Primary endpoint: add a YouTube video to personal library
   app.post('/api/v1/videos', {
     preHandler: [authMiddleware],
