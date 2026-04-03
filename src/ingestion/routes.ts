@@ -141,6 +141,42 @@ export async function ingestionRoutes(app: FastifyInstance) {
     return reply.status(200).send({ ok: true, status: 'processing' });
   });
 
+  // Re-host episode thumbnails from YouTube to our S3
+  app.post('/api/v1/episodes/:id/rehost-thumbnail', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const db = (await import('../db/client.js')).getDb();
+    const { episodes } = await import('../db/schema.js');
+    const { eq } = await import('drizzle-orm');
+
+    const rows = await db.select().from(episodes).where(eq(episodes.id, id)).limit(1);
+    if (rows.length === 0) throw new (await import('../shared/errors.js')).NotFoundError('Episode');
+    const ep = rows[0];
+
+    if (!ep.imageUrl || ep.imageUrl.includes('/storage/')) {
+      return reply.send({ ok: true, imageUrl: ep.imageUrl, message: 'Already hosted' });
+    }
+
+    const { uploadToPodcastBucket } = await import('../publishing/storage.js');
+    const config = (await import('../config.js')).getConfig();
+
+    const thumbRes = await fetch(ep.imageUrl);
+    if (!thumbRes.ok) throw new ValidationError('Failed to fetch thumbnail');
+    const thumbBuffer = Buffer.from(await thumbRes.arrayBuffer());
+    const contentType = thumbRes.headers.get('content-type') || 'image/jpeg';
+    const ext = contentType.includes('png') ? 'png' : 'jpg';
+    const thumbKey = `thumbnails/${request.userId}/${id}.${ext}`;
+    await uploadToPodcastBucket(thumbKey, thumbBuffer, contentType);
+    const hostedUrl = `${config.BASE_URL}/storage/${thumbKey}`;
+
+    await db.update(episodes)
+      .set({ imageUrl: hostedUrl, updatedAt: new Date() })
+      .where(eq(episodes.id, id));
+
+    return reply.send({ ok: true, imageUrl: hostedUrl });
+  });
+
   // Upload/regenerate podcast cover image
   app.post('/api/v1/feeds/:feedId/cover', {
     preHandler: [authMiddleware],
