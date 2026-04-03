@@ -54,7 +54,7 @@ export async function downloadAudio(videoId: string): Promise<YtDlpResult> {
     '--no-playlist',
     '--no-overwrites',
     '--js-runtimes', 'node',
-    '--extractor-args', 'youtube:player_client=mediaconnect',
+    '--remote-components', 'ejs:github',
   ];
 
   // Use cookies file if available (for authenticated downloads)
