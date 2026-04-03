@@ -93,3 +93,58 @@ export async function getFileInfo(key: string) {
     Key: key,
   }));
 }
+
+export async function uploadToPodcastBucket(key: string, body: Buffer | NodeJS.ReadableStream | ReadableStream, contentType?: string): Promise<string> {
+  const config = getConfig();
+  const client = getS3Client();
+
+  const upload = new Upload({
+    client,
+    params: {
+      Bucket: config.S3_PODCAST_BUCKET,
+      Key: key,
+      Body: body as any,
+      ContentType: contentType,
+    },
+  });
+
+  await upload.done();
+  log.info({ key, bucket: config.S3_PODCAST_BUCKET }, 'File uploaded to podcast bucket');
+  return key;
+}
+
+export async function getPodcastFile(key: string, range?: string) {
+  const config = getConfig();
+  const client = getS3Client();
+
+  const params: any = {
+    Bucket: config.S3_PODCAST_BUCKET,
+    Key: key,
+  };
+  if (range) {
+    params.Range = range;
+  }
+
+  return client.send(new GetObjectCommand(params));
+}
+
+export async function deletePodcastFile(key: string): Promise<void> {
+  const config = getConfig();
+  const client = getS3Client();
+
+  await client.send(new DeleteObjectCommand({
+    Bucket: config.S3_PODCAST_BUCKET,
+    Key: key,
+  }));
+  log.info({ key, bucket: config.S3_PODCAST_BUCKET }, 'File deleted from podcast bucket');
+}
+
+export async function getPodcastFileInfo(key: string) {
+  const config = getConfig();
+  const client = getS3Client();
+
+  return client.send(new HeadObjectCommand({
+    Bucket: config.S3_PODCAST_BUCKET,
+    Key: key,
+  }));
+}

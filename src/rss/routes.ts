@@ -9,8 +9,16 @@ import {
   publishEpisode, scheduleEpisode, deleteEpisode,
 } from './episode-service.js';
 import { serveFeed } from '../publishing/feed-server.js';
+import { getPodcastFile, getPodcastFileInfo } from '../publishing/storage.js';
+import { getDb } from '../db/client.js';
+import { episodes } from '../db/schema.js';
+import { eq, and, isNull } from 'drizzle-orm';
 import { z } from 'zod';
+import { getConfig } from '../config.js';
 import { PODCAST_CATEGORIES } from '../shared/constants.js';
+import { createChildLogger } from '../shared/logger.js';
+
+const storageLog = createChildLogger('storage-proxy');
 
 const createFeedSchema = z.object({
   title: z.string().min(1).max(255),
@@ -141,6 +149,83 @@ export async function feedRoutes(app: FastifyInstance) {
     return { jobId: job.id, status: 'queued' };
   });
 
+  // Subscribe landing page — detects platform and deep-links to podcast app
+  app.get('/subscribe/:token', async (request, reply) => {
+    const { token } = request.params as { token: string };
+    const feedUrl = `${getConfig().BASE_URL}/feed/${token}.xml`;
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Subscribe to Podcast</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #f1f5f9; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .container { max-width: 400px; width: 100%; text-align: center; }
+    h1 { font-size: 24px; margin-bottom: 8px; }
+    p { color: #94a3b8; font-size: 14px; margin-bottom: 24px; }
+    .apps { display: flex; flex-direction: column; gap: 12px; }
+    a.btn { display: block; padding: 14px 20px; border-radius: 10px; text-decoration: none; font-weight: 600; font-size: 15px; transition: opacity 0.15s; }
+    a.btn:hover { opacity: 0.85; }
+    .apple { background: #a855f7; color: white; }
+    .pcast { background: #3b82f6; color: white; }
+    .overcast { background: #fc7e0f; color: white; }
+    .pocketcasts { background: #f43e37; color: white; }
+    .copy { background: #1e293b; color: #f1f5f9; border: 1px solid #334155; cursor: pointer; }
+    .divider { color: #475569; font-size: 12px; margin: 16px 0; }
+    .feed-url { font-size: 11px; color: #64748b; word-break: break-all; margin-top: 16px; }
+    #copied { display: none; color: #22c55e; font-size: 13px; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Vid2Pod</h1>
+    <p>Subscribe to your personal podcast feed</p>
+    <div class="apps">
+      <a class="btn apple" href="podcast://${feedUrl.replace(/^https?:\/\//, '')}">Open in Apple Podcasts</a>
+      <a class="btn overcast" href="overcast://x-callback-url/add?url=${encodeURIComponent(feedUrl)}">Open in Overcast</a>
+      <a class="btn pocketcasts" href="pktc://subscribe/${encodeURIComponent(feedUrl)}">Open in Pocket Casts</a>
+      <a class="btn pcast" href="pcast://${feedUrl.replace(/^https?:\/\//, '')}">Open in Other Podcast App</a>
+      <div class="divider">or</div>
+      <a class="btn copy" id="copyBtn" href="#">Copy Feed URL</a>
+      <div id="copied">Copied!</div>
+    </div>
+    <div class="feed-url">${feedUrl}</div>
+  </div>
+  <script>
+    // Auto-redirect based on platform
+    (function() {
+      var ua = navigator.userAgent;
+      var feedUrl = ${JSON.stringify(feedUrl)};
+      var isIOS = /iPhone|iPad|iPod/.test(ua);
+      var isAndroid = /Android/.test(ua);
+
+      if (isIOS) {
+        // Try Apple Podcasts via podcast:// scheme
+        window.location.href = 'podcast://' + feedUrl.replace(/^https?:\\/\\//, '');
+      } else if (isAndroid) {
+        // Try pcast:// which many Android podcast apps handle
+        window.location.href = 'pcast://' + feedUrl.replace(/^https?:\\/\\//, '');
+      }
+    })();
+
+    document.getElementById('copyBtn').addEventListener('click', function(e) {
+      e.preventDefault();
+      navigator.clipboard.writeText(${JSON.stringify(feedUrl)}).then(function() {
+        document.getElementById('copied').style.display = 'block';
+        setTimeout(function() { document.getElementById('copied').style.display = 'none'; }, 2000);
+      });
+    });
+  </script>
+</body>
+</html>`;
+
+    reply.type('text/html; charset=utf-8');
+    return html;
+  });
+
   app.get('/feed/:token.xml', async (request, reply) => {
     const { token } = request.params as { token: string };
     const authHeader = request.headers.authorization;
@@ -153,4 +238,89 @@ export async function feedRoutes(app: FastifyInstance) {
     reply.type('application/xml; charset=utf-8');
     return xml;
   });
+
+  // Stream audio files from podcast bucket — no auth (security via unguessable UUID paths)
+  app.get('/storage/*', async (request, reply) => {
+    const key = (request.params as any)['*'];
+    if (!key) {
+      return reply.status(400).send({ error: 'Missing file key' });
+    }
+
+    try {
+      const range = request.headers.range;
+
+      if (range) {
+        // Partial content — podcast apps use this to seek and resume
+        const result = await getPodcastFile(key, range);
+        reply
+          .status(206)
+          .header('Content-Type', result.ContentType || 'audio/mpeg')
+          .header('Content-Length', result.ContentLength!)
+          .header('Content-Range', result.ContentRange!)
+          .header('Accept-Ranges', 'bytes')
+          .header('Cache-Control', 'public, max-age=86400');
+        return reply.send(result.Body);
+      }
+
+      // Full file download — flag episode for 7-day storage expiry
+      const head = await getPodcastFileInfo(key);
+      const result = await getPodcastFile(key);
+
+      // Mark first download on matching episode (fire-and-forget)
+      flagFirstDownload(key).catch((err) =>
+        storageLog.warn({ err, key }, 'Failed to flag first download')
+      );
+
+      reply
+        .status(200)
+        .header('Content-Type', head.ContentType || 'audio/mpeg')
+        .header('Content-Length', head.ContentLength!)
+        .header('Accept-Ranges', 'bytes')
+        .header('Cache-Control', 'public, max-age=86400');
+      return reply.send(result.Body);
+    } catch (err: any) {
+      if (err.name === 'NoSuchKey' || err.$metadata?.httpStatusCode === 404) {
+        return reply.status(404).send({ error: 'File not found' });
+      }
+      throw err;
+    }
+  });
+}
+
+const STORAGE_TTL_DAYS = 7;
+
+async function flagFirstDownload(storageKey: string): Promise<void> {
+  const enclosureUrl = `%/storage/${storageKey}`;
+  const db = getDb();
+
+  // Find episodes whose enclosure URL matches this storage key and haven't been flagged yet
+  const matchingEpisodes = await db.select({ id: episodes.id })
+    .from(episodes)
+    .where(
+      and(
+        eq(episodes.storageCleared, false),
+        isNull(episodes.firstDownloadedAt),
+      )
+    );
+
+  const now = new Date();
+  const expiry = new Date(now.getTime() + STORAGE_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+  for (const ep of matchingEpisodes) {
+    // Check if this episode's enclosure URL contains our storage key
+    const fullEp = await db.select().from(episodes).where(eq(episodes.id, ep.id)).limit(1);
+    if (fullEp.length === 0) continue;
+    if (!fullEp[0].enclosureUrl?.includes(storageKey)) continue;
+
+    await db.update(episodes)
+      .set({
+        firstDownloadedAt: now,
+        storageExpiry: expiry,
+        updatedAt: now,
+      })
+      .where(eq(episodes.id, ep.id));
+
+    storageLog.info({ episodeId: ep.id, storageExpiry: expiry.toISOString() },
+      'Episode flagged for storage cleanup in 7 days');
+  }
 }

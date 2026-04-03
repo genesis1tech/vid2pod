@@ -1,6 +1,11 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
+import { ZodError } from 'zod';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 import { getConfig } from './config.js';
 import { createChildLogger } from './shared/logger.js';
 import { AppError } from './shared/errors.js';
@@ -36,6 +41,13 @@ export async function createServer() {
       });
     }
 
+    if (error instanceof ZodError) {
+      return reply.status(400).send({
+        error: 'VALIDATION_ERROR',
+        message: error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', '),
+      });
+    }
+
     if ('validation' in error) {
       return reply.status(400).send({
         error: 'VALIDATION_ERROR',
@@ -55,6 +67,24 @@ export async function createServer() {
   await app.register(licenseRoutes);
   await app.register(ingestionRoutes);
   await app.register(feedRoutes);
+
+  // Serve built frontend in production
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const webDir = resolve(__dirname, '../dist/web');
+  if (existsSync(webDir)) {
+    await app.register(fastifyStatic, {
+      root: webDir,
+      prefix: '/',
+      wildcard: false,
+    });
+    // SPA fallback — serve index.html for non-API, non-feed routes
+    app.setNotFoundHandler((request, reply) => {
+      if (request.url.startsWith('/api/') || request.url.startsWith('/feed/') || request.url.startsWith('/storage/') || request.url.startsWith('/subscribe/')) {
+        return reply.status(404).send({ error: 'NOT_FOUND', message: 'Not found' });
+      }
+      return reply.sendFile('index.html');
+    });
+  }
 
   const stopScheduler = startScheduler();
 

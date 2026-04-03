@@ -1,9 +1,14 @@
 import { FastifyInstance } from 'fastify';
 import { uploadAsset, addStreamUrl, listAssets, getAsset, deleteAsset, fetchYouTubeMetadata } from './service.js';
+import { addYouTubeVideo } from './youtube.js';
 import { authMiddleware } from '../auth/middleware.js';
 import { z } from 'zod';
 import { ACCEPTED_AUDIO_TYPES, MAX_UPLOAD_SIZE } from '../shared/constants.js';
 import { ValidationError } from '../shared/errors.js';
+
+const addVideoSchema = z.object({
+  url: z.string().url(),
+});
 
 const addStreamSchema = z.object({
   licenseId: z.string().uuid(),
@@ -17,6 +22,18 @@ const youtubeMetaSchema = z.object({
 });
 
 export async function ingestionRoutes(app: FastifyInstance) {
+  // Primary endpoint: add a YouTube video to personal library
+  app.post('/api/v1/videos', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const body = addVideoSchema.parse(request.body);
+    const result = await addYouTubeVideo({
+      userId: request.userId!,
+      url: body.url,
+    });
+    return reply.status(201).send(result);
+  });
+
   app.post('/api/v1/assets/upload', {
     preHandler: [authMiddleware],
   }, async (request, reply) => {

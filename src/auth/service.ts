@@ -1,16 +1,19 @@
 import { getDb } from '../db/client.js';
-import { users } from '../db/schema.js';
+import { users, feeds } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { hash, compare } from 'bcrypt';
 import { v4 as uuid } from 'uuid';
+import { nanoid } from 'nanoid';
 import { signAccessToken, signRefreshToken, JwtPayload } from './jwt.js';
 import { createChildLogger } from '../shared/logger.js';
 import { AppError, NotFoundError } from '../shared/errors.js';
+import { getConfig } from '../config.js';
 
 const log = createChildLogger('auth-service');
 
 export async function register(email: string, password: string, displayName?: string) {
   const db = getDb();
+  const config = getConfig();
 
   const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (existing.length > 0) {
@@ -28,7 +31,23 @@ export async function register(email: string, password: string, displayName?: st
     role: 'editor',
   });
 
-  log.info({ userId: id, email }, 'User registered');
+  const ownershipToken = nanoid();
+  const feedId = uuid();
+  const feedName = displayName || email.split('@')[0];
+
+  await db.insert(feeds).values({
+    id: feedId,
+    userId: id,
+    title: `${feedName}'s Podcast Library`,
+    description: `Personal podcast feed for ${feedName}`,
+    author: feedName,
+    categoryPrimary: 'Technology',
+    ownershipToken,
+    visibility: 'private',
+    baseUrl: config.BASE_URL,
+  });
+
+  log.info({ userId: id, email, feedId }, 'User registered with personal feed');
 
   const payload: JwtPayload = { sub: id, email, role: 'editor' };
   const [accessToken, refreshToken] = await Promise.all([
@@ -36,8 +55,11 @@ export async function register(email: string, password: string, displayName?: st
     signRefreshToken(payload),
   ]);
 
+  const feedUrl = `${config.BASE_URL}/feed/${ownershipToken}.xml`;
+
   return {
     user: { id, email, displayName: displayName || null, role: 'editor' as const },
+    feedUrl,
     accessToken,
     refreshToken,
   };

@@ -10,6 +10,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   token: string | null;
+  feedUrl: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, displayName?: string) => Promise<void>;
   logout: () => void;
@@ -41,12 +42,15 @@ export async function apiFetch<T = any>(path: string, token: string | null, opti
 
 interface AuthResponse {
   accessToken: string;
+  refreshToken?: string;
+  feedUrl?: string;
   user: User;
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(localStorage.getItem('v2p_token'));
+  const [feedUrl, setFeedUrl] = useState<string | null>(localStorage.getItem('v2p_feedUrl'));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -55,7 +59,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .then((u) => setUser(u))
         .catch(() => {
           localStorage.removeItem('v2p_token');
+          localStorage.removeItem('v2p_feedUrl');
           setToken(null);
+          setFeedUrl(null);
         })
         .finally(() => setLoading(false));
     } else {
@@ -71,6 +77,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('v2p_token', res.accessToken);
     setToken(res.accessToken);
     setUser(res.user);
+    // Fetch feed URL from feeds list
+    const feeds = await apiFetch<any[]>('/api/v1/feeds', res.accessToken);
+    if (feeds.length > 0) {
+      const url = `${window.location.origin}/feed/${feeds[0].ownershipToken}.xml`;
+      localStorage.setItem('v2p_feedUrl', url);
+      setFeedUrl(url);
+    }
   };
 
   const registerFn = async (email: string, password: string, displayName?: string) => {
@@ -81,16 +94,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('v2p_token', res.accessToken);
     setToken(res.accessToken);
     setUser(res.user);
+    if (res.feedUrl) {
+      localStorage.setItem('v2p_feedUrl', res.feedUrl);
+      setFeedUrl(res.feedUrl);
+    }
   };
 
   const logout = () => {
     localStorage.removeItem('v2p_token');
+    localStorage.removeItem('v2p_feedUrl');
     setToken(null);
+    setFeedUrl(null);
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login: loginFn, register: registerFn, logout, loading }}>
+    <AuthContext.Provider value={{ user, token, feedUrl, login: loginFn, register: registerFn, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );

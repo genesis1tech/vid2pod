@@ -37,7 +37,7 @@ export const licenses = pgTable('licenses', {
 export const assets = pgTable('assets', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id),
-  licenseId: uuid('license_id').notNull().references(() => licenses.id),
+  licenseId: uuid('license_id').references(() => licenses.id),
   sourceType: text('source_type', {
     enum: ['audio_upload', 'stream_url', 'licensed_file'],
   }).notNull(),
@@ -126,6 +126,9 @@ export const episodes = pgTable('episodes', {
     enum: ['draft', 'scheduled', 'published', 'retired'],
   }).notNull().default('draft'),
   sortOrder: integer('sort_order').notNull().default(0),
+  firstDownloadedAt: timestamp('first_downloaded_at', { withTimezone: true }),
+  storageExpiry: timestamp('storage_expiry', { withTimezone: true }),
+  storageCleared: boolean('storage_cleared').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

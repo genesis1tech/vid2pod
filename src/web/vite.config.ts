@@ -12,9 +12,12 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    host: true,
     proxy: {
       '/api': 'http://localhost:3000',
       '/feed': 'http://localhost:3000',
+      '/storage': 'http://localhost:3000',
+      '/subscribe': 'http://localhost:3000',
     },
   },
 });
