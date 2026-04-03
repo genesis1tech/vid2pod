@@ -96,6 +96,27 @@ export async function ingestionRoutes(app: FastifyInstance) {
     // Update episode with metadata from YouTube
     const { episodes } = await import('../db/schema.js');
     if (title || description || duration || thumbnail) {
+      // Download and re-host the thumbnail so podcast apps can access it
+      let hostedThumbnailUrl: string | undefined;
+      if (thumbnail) {
+        try {
+          const { uploadToPodcastBucket } = await import('../publishing/storage.js');
+          const config = (await import('../config.js')).getConfig();
+          const thumbRes = await fetch(thumbnail);
+          if (thumbRes.ok) {
+            const thumbBuffer = Buffer.from(await thumbRes.arrayBuffer());
+            const contentType = thumbRes.headers.get('content-type') || 'image/jpeg';
+            const ext = contentType.includes('png') ? 'png' : 'jpg';
+            const thumbKey = `thumbnails/${request.userId}/${assetId}.${ext}`;
+            await uploadToPodcastBucket(thumbKey, thumbBuffer, contentType);
+            hostedThumbnailUrl = `${config.BASE_URL}/storage/${thumbKey}`;
+          }
+        } catch {
+          // Fall back to original YouTube URL if download fails
+          hostedThumbnailUrl = thumbnail;
+        }
+      }
+
       const linkedEps = await db.select().from(episodes)
         .where(eq(episodes.assetId, assetId));
       for (const ep of linkedEps) {
@@ -103,7 +124,7 @@ export async function ingestionRoutes(app: FastifyInstance) {
           ...(title && { title }),
           ...(description && { description }),
           ...(duration && { durationSeconds: Math.round(parseFloat(duration)) }),
-          ...(thumbnail && { imageUrl: thumbnail }),
+          ...(hostedThumbnailUrl && { imageUrl: hostedThumbnailUrl }),
           updatedAt: new Date(),
         }).where(eq(episodes.id, ep.id));
       }
