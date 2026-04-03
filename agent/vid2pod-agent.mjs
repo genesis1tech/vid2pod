@@ -21,23 +21,31 @@ import { promisify } from 'util';
 import { readFile, readdir, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
+import { platform } from 'os';
 import { randomUUID } from 'crypto';
 import { createReadStream } from 'fs';
 
 const execFileAsync = promisify(execFile);
 
-// Parse args
+// Load saved config from ~/.vid2pod/config.json
+let savedConfig = {};
+try {
+  const configPath = join(homedir(), '.vid2pod', 'config.json');
+  savedConfig = JSON.parse(await readFile(configPath, 'utf-8'));
+} catch { /* no saved config */ }
+
+// Parse args (CLI > env > saved config > defaults)
 const args = process.argv.slice(2);
 function getArg(name) {
   const idx = args.indexOf(`--${name}`);
   return idx !== -1 ? args[idx + 1] : undefined;
 }
 
-const SERVER = getArg('server') || process.env.VID2POD_SERVER || 'https://vid2pod.g1tech.cloud';
-const EMAIL = getArg('email') || process.env.VID2POD_EMAIL;
-const PASSWORD = getArg('password') || process.env.VID2POD_PASSWORD;
-const POLL_INTERVAL = parseInt(getArg('interval') || process.env.VID2POD_POLL_INTERVAL || '30', 10) * 1000;
-const BROWSER = getArg('browser') || process.env.VID2POD_BROWSER || 'chrome';
+const SERVER = getArg('server') || process.env.VID2POD_SERVER || savedConfig.server || 'https://vid2pod.g1tech.cloud';
+const EMAIL = getArg('email') || process.env.VID2POD_EMAIL || savedConfig.email;
+const PASSWORD = getArg('password') || process.env.VID2POD_PASSWORD || savedConfig.password;
+const POLL_INTERVAL = parseInt(getArg('interval') || process.env.VID2POD_POLL_INTERVAL || savedConfig.interval || '30', 10) * 1000;
+const BROWSER = getArg('browser') || process.env.VID2POD_BROWSER || savedConfig.browser || 'chrome';
 const DOWNLOAD_DIR = getArg('download-dir') || process.env.VID2POD_DOWNLOAD_DIR || join(homedir(), 'Vid2Pod');
 
 if (!EMAIL || !PASSWORD) {
