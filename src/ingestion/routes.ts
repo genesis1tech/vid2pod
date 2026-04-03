@@ -120,6 +120,37 @@ export async function ingestionRoutes(app: FastifyInstance) {
     return reply.status(200).send({ ok: true, status: 'processing' });
   });
 
+  // Upload/regenerate podcast cover image
+  app.post('/api/v1/feeds/:feedId/cover', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const { feedId } = request.params as { feedId: string };
+    const db = (await import('../db/client.js')).getDb();
+    const { feeds } = await import('../db/schema.js');
+    const { eq, and } = await import('drizzle-orm');
+
+    const feedRows = await db.select().from(feeds)
+      .where(and(eq(feeds.id, feedId), eq(feeds.userId, request.userId!)))
+      .limit(1);
+    if (feedRows.length === 0) throw new (await import('../shared/errors.js')).NotFoundError('Feed');
+    const feed = feedRows[0];
+
+    const { generateCoverImage } = await import('../rss/cover-generator.js');
+    const { uploadToPodcastBucket } = await import('../publishing/storage.js');
+    const config = (await import('../config.js')).getConfig();
+
+    const coverBuffer = await generateCoverImage(feed.title);
+    const coverKey = `covers/${request.userId}/${feedId}.png`;
+    await uploadToPodcastBucket(coverKey, coverBuffer, 'image/png');
+    const imageUrl = `${config.BASE_URL}/storage/${coverKey}`;
+
+    await db.update(feeds)
+      .set({ imageUrl, updatedAt: new Date() })
+      .where(eq(feeds.id, feedId));
+
+    return reply.status(200).send({ ok: true, imageUrl });
+  });
+
   // Upload YouTube cookies for authenticated downloads
   app.post('/api/v1/youtube/cookies', {
     preHandler: [authMiddleware],

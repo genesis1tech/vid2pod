@@ -8,6 +8,8 @@ import { signAccessToken, signRefreshToken, JwtPayload } from './jwt.js';
 import { createChildLogger } from '../shared/logger.js';
 import { AppError, NotFoundError } from '../shared/errors.js';
 import { getConfig } from '../config.js';
+import { generateCoverImage } from '../rss/cover-generator.js';
+import { uploadToPodcastBucket } from '../publishing/storage.js';
 
 const log = createChildLogger('auth-service');
 
@@ -35,16 +37,25 @@ export async function register(email: string, password: string, displayName?: st
   const feedId = uuid();
   const feedName = displayName || email.split('@')[0];
 
+  const feedTitle = `${feedName}'s Podcast Library`;
+
+  // Generate cover image
+  const coverBuffer = await generateCoverImage(feedTitle);
+  const coverKey = `covers/${id}/cover.png`;
+  await uploadToPodcastBucket(coverKey, coverBuffer, 'image/png');
+  const imageUrl = `${config.BASE_URL}/storage/${coverKey}`;
+
   await db.insert(feeds).values({
     id: feedId,
     userId: id,
-    title: `${feedName}'s Podcast Library`,
+    title: feedTitle,
     description: `Personal podcast feed for ${feedName}`,
     author: feedName,
     categoryPrimary: 'Technology',
     ownershipToken,
     visibility: 'private',
     baseUrl: config.BASE_URL,
+    imageUrl,
   });
 
   log.info({ userId: id, email, feedId }, 'User registered with personal feed');
