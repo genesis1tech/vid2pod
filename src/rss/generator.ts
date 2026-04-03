@@ -150,12 +150,10 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
   xml += `    <itunes:explicit>${feed.explicit ? 'yes' : 'no'}</itunes:explicit>\n`;
   xml += `    <itunes:type>${escapeXml(feed.feedType)}</itunes:type>\n`;
 
-  if (feed.email) {
-    xml += `    <itunes:owner>\n`;
-    xml += `      <itunes:name>${escapeXml(feed.author)}</itunes:name>\n`;
-    xml += `      <itunes:email>${escapeXml(feed.email)}</itunes:email>\n`;
-    xml += `    </itunes:owner>\n`;
-  }
+  xml += `    <itunes:owner>\n`;
+  xml += `      <itunes:name>${escapeXml(feed.author)}</itunes:name>\n`;
+  xml += `      <itunes:email>${escapeXml(feed.email || `${feed.author.toLowerCase().replace(/[^a-z0-9]/g, '')}@vid2pod.app`)}</itunes:email>\n`;
+  xml += `    </itunes:owner>\n`;
 
   for (const ep of items) {
     if (ep.status !== 'published') continue;
