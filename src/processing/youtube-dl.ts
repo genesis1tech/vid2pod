@@ -53,6 +53,7 @@ export async function downloadAudio(videoId: string): Promise<YtDlpResult> {
     '--write-info-json',
     '--no-playlist',
     '--no-overwrites',
+    '--js-runtimes', 'nodejs',
     `https://www.youtube.com/watch?v=${videoId}`,
   ], {
     cwd: workDir,
