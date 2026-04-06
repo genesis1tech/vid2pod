@@ -21,7 +21,7 @@ await c.end();
 " 2>&1 || echo "Migration warning (non-fatal), continuing..."
 
 echo "Starting worker in background..."
-node --env-file-if-exists=.env dist/processing/worker.js &
+node dist/processing/worker.js &
 
 echo "Starting server..."
-exec node --env-file-if-exists=.env dist/index.js
+exec node dist/index.js
