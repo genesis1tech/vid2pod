@@ -73,4 +73,57 @@ export async function authRoutes(app: FastifyInstance) {
   }, async (request) => {
     return getUser(request.userId!);
   });
+
+  // Save YouTube cookies for the current user
+  app.post('/api/v1/auth/youtube-cookies', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const { cookies } = request.body as { cookies: string };
+    if (!cookies || typeof cookies !== 'string' || cookies.trim().length < 10) {
+      return reply.status(400).send({ error: 'Invalid cookies content' });
+    }
+
+    const { getDb } = await import('../db/client.js');
+    const { users } = await import('../db/schema.js');
+    const { eq } = await import('drizzle-orm');
+    const db = getDb();
+
+    await db.update(users)
+      .set({ youtubeCookies: cookies.trim(), updatedAt: new Date() })
+      .where(eq(users.id, request.userId!));
+
+    log.info({ userId: request.userId }, 'YouTube cookies saved');
+    return reply.send({ ok: true });
+  });
+
+  // Check if user has YouTube cookies configured
+  app.get('/api/v1/auth/youtube-cookies/status', {
+    preHandler: [authMiddleware],
+  }, async (request) => {
+    const { getDb } = await import('../db/client.js');
+    const { users } = await import('../db/schema.js');
+    const { eq } = await import('drizzle-orm');
+    const db = getDb();
+
+    const rows = await db.select({ youtubeCookies: users.youtubeCookies })
+      .from(users).where(eq(users.id, request.userId!)).limit(1);
+
+    return { connected: !!(rows[0]?.youtubeCookies) };
+  });
+
+  // Clear YouTube cookies
+  app.delete('/api/v1/auth/youtube-cookies', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const { getDb } = await import('../db/client.js');
+    const { users } = await import('../db/schema.js');
+    const { eq } = await import('drizzle-orm');
+    const db = getDb();
+
+    await db.update(users)
+      .set({ youtubeCookies: null, updatedAt: new Date() })
+      .where(eq(users.id, request.userId!));
+
+    return reply.send({ ok: true });
+  });
 }

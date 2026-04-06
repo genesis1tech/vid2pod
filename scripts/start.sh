@@ -8,6 +8,7 @@ import pg from 'pg';
 const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await c.connect();
 await c.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS clerk_id TEXT');
+await c.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS youtube_cookies TEXT');
 await c.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL');
 await c.query(\`
   DO \\\$\\\$ BEGIN

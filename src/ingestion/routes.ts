@@ -1,7 +1,7 @@
 import { FastifyInstance } from 'fastify';
 import { uploadAsset, addStreamUrl, listAssets, getAsset, deleteAsset, fetchYouTubeMetadata } from './service.js';
 import { addYouTubeVideo } from './youtube.js';
-import { authMiddleware, requireRole } from '../auth/middleware.js';
+import { authMiddleware } from '../auth/middleware.js';
 import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
@@ -19,9 +19,7 @@ const addVideoSchema = z.object({
   url: z.string().url(),
 });
 
-const cookiesSchema = z.object({
-  cookies: z.string().min(1),
-});
+
 
 const addStreamSchema = z.object({
   licenseId: z.string().uuid(),
@@ -157,20 +155,7 @@ export async function ingestionRoutes(app: FastifyInstance) {
     return reply.status(200).send({ ok: true, imageUrl });
   });
 
-  // Upload YouTube cookies for authenticated downloads (admin only)
-  app.post('/api/v1/youtube/cookies', {
-    preHandler: [authMiddleware, requireRole('admin')],
-  }, async (request, reply) => {
-    const body = cookiesSchema.parse(request.body);
-    const { writeFile, mkdir } = await import('fs/promises');
-    const { join } = await import('path');
-    const { tmpdir } = await import('os');
-    const cookiesDir = join(tmpdir(), 'vid2pod');
-    await mkdir(cookiesDir, { recursive: true });
-    const cookiesPath = join(cookiesDir, 'cookies.txt');
-    await writeFile(cookiesPath, body.cookies, { encoding: 'utf-8', mode: 0o600 });
-    return reply.status(200).send({ ok: true, message: 'YouTube cookies saved' });
-  });
+
 
   // Primary endpoint: add a YouTube video to personal library
   app.post('/api/v1/videos', {

@@ -66,12 +66,18 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
     // YouTube download path: asset has youtubeVideoId but no storageKey yet
     if (asset.youtubeVideoId && !asset.storageKey) {
       const { downloadAudio } = await import('./youtube-dl.js');
+      const { users } = await import('../db/schema.js');
 
       await db.update(assets)
         .set({ processingStatus: 'downloading', updatedAt: new Date() })
         .where(eq(assets.id, asset.id));
 
-      const ytResult = await downloadAudio(asset.youtubeVideoId);
+      // Fetch user's YouTube cookies
+      const userRows = await db.select({ youtubeCookies: users.youtubeCookies })
+        .from(users).where(eq(users.id, asset.userId)).limit(1);
+      const userCookies = userRows[0]?.youtubeCookies || null;
+
+      const ytResult = await downloadAudio(asset.youtubeVideoId, userCookies);
       workDir = ytResult.workDir;
 
       // Upload downloaded audio to S3

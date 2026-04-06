@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, apiFetch } from '../hooks/useAuth.js';
 import { AddVideo } from './AddVideo.js';
 import { EpisodeList } from './EpisodeList.js';
+import { YouTubeSetup } from './YouTubeSetup.js';
 import QRCode from 'qrcode';
 
 export function Library() {
@@ -100,6 +101,7 @@ export function Library() {
             </div>
           )}
 
+          <YouTubeSetup />
           <AddVideo onAdded={refreshEpisodes} />
           <EpisodeList episodes={episodes} loading={loading} />
         </div>
