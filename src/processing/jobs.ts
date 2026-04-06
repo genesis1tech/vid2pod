@@ -2,7 +2,7 @@ import { Queue, Worker } from 'bullmq';
 import { getConfig } from '../config.js';
 import { getDb } from '../db/client.js';
 import { assets, processingJobs, episodes, feeds } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { extractMetadata } from './metadata-extractor.js';
 import { transcode } from './transcoder.js';
 import { normalize } from './normalizer.js';
@@ -10,7 +10,7 @@ import { uploadFile, uploadToPodcastBucket, getSignedDownloadUrl } from '../publ
 import { validateLicense } from '../licensing/service.js';
 import { createChildLogger } from '../shared/logger.js';
 import { NotFoundError } from '../shared/errors.js';
-import { writeFile, readFile, unlink, mkdir, rm } from 'fs/promises';
+import { writeFile, readFile, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { v4 as uuid } from 'uuid';
@@ -63,8 +63,53 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
   try {
     let inputPath: string;
 
-    // Download source audio from S3 (agent-uploaded or direct upload)
-    if (asset.storageKey) {
+    // YouTube download path: asset has youtubeVideoId but no storageKey yet
+    if (asset.youtubeVideoId && !asset.storageKey) {
+      const { downloadAudio } = await import('./youtube-dl.js');
+
+      await db.update(assets)
+        .set({ processingStatus: 'downloading', updatedAt: new Date() })
+        .where(eq(assets.id, asset.id));
+
+      const ytResult = await downloadAudio(asset.youtubeVideoId);
+      workDir = ytResult.workDir;
+
+      // Upload downloaded audio to S3
+      const audioBuffer = await readFile(ytResult.audioPath);
+      const safeVideoId = /^[a-zA-Z0-9_-]{11}$/.test(asset.youtubeVideoId!)
+        ? asset.youtubeVideoId!
+        : asset.id;
+      const storageKey = `assets/${asset.userId}/${asset.id}/${safeVideoId}.mp3`;
+      await uploadFile(storageKey, audioBuffer, 'audio/mpeg');
+
+      // Update asset with storage info
+      await db.update(assets)
+        .set({
+          storageKey,
+          originalFilename: `${asset.youtubeVideoId}.mp3`,
+          mimeType: 'audio/mpeg',
+          fileSizeBytes: audioBuffer.length,
+          processingStatus: 'processing',
+          updatedAt: new Date(),
+        })
+        .where(eq(assets.id, asset.id));
+
+      // Update linked episodes with YouTube metadata (title, description, duration)
+      const linkedEps = await db.select().from(episodes)
+        .where(eq(episodes.assetId, asset.id));
+
+      for (const ep of linkedEps) {
+        await db.update(episodes).set({
+          title: ytResult.metadata.title,
+          description: ytResult.metadata.description || ytResult.metadata.title,
+          ...(ytResult.metadata.duration && { durationSeconds: Math.round(ytResult.metadata.duration) }),
+          ...(ytResult.metadata.thumbnail && { imageUrl: ytResult.metadata.thumbnail }),
+          updatedAt: new Date(),
+        }).where(eq(episodes.id, ep.id));
+      }
+
+      inputPath = ytResult.audioPath;
+    } else if (asset.storageKey) {
       workDir = join(tmpdir(), `vid2pod-${asset.id}`);
       await mkdir(workDir, { recursive: true });
       const { getFile } = await import('../publishing/storage.js');
@@ -133,10 +178,13 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
       })
       .where(eq(assets.id, asset.id));
 
-    // Auto-publish: update linked episodes with enclosure info and publish
+    // Auto-publish: update linked draft episodes with enclosure info and publish
     const enclosureUrl = `${config.BASE_URL}/storage/${outputKey}`;
     const linkedEpisodes = await db.select().from(episodes)
-      .where(eq(episodes.assetId, asset.id));
+      .where(and(
+        eq(episodes.assetId, asset.id),
+        eq(episodes.status, 'draft'),
+      ));
 
     for (const ep of linkedEpisodes) {
       await db.update(episodes)

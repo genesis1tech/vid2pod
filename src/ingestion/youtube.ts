@@ -1,8 +1,9 @@
 import { getDb } from '../db/client.js';
 import { assets, episodes, feeds } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
 import { extractVideoId } from '../processing/youtube-dl.js';
+import { enqueueProcessingJob } from '../processing/jobs.js';
 import { createChildLogger } from '../shared/logger.js';
 import { ValidationError, NotFoundError } from '../shared/errors.js';
 
@@ -29,25 +30,28 @@ export async function addYouTubeVideo(params: {
   }
   const feed = feedRows[0];
 
-  // Check for duplicate video
+  // Check for duplicate video within this user's library
   const existingAssets = await db.select().from(assets)
-    .where(eq(assets.youtubeVideoId, videoId))
+    .where(and(
+      eq(assets.youtubeVideoId, videoId),
+      eq(assets.userId, params.userId),
+    ))
     .limit(1);
 
   if (existingAssets.length > 0) {
-    throw new ValidationError(`Video ${videoId} has already been added`);
+    throw new ValidationError(`Video ${videoId} has already been added to your library`);
   }
 
-  // Create asset record — pending_download means local agent needs to download it
+  // Create asset record — will be enqueued for server-side download
   const assetId = uuid();
   const [asset] = await db.insert(assets).values({
     id: assetId,
     userId: params.userId,
-    licenseId: null as any,
+    licenseId: null,
     sourceType: 'stream_url',
     youtubeVideoId: videoId,
     streamUrl: `https://www.youtube.com/watch?v=${videoId}`,
-    processingStatus: 'pending_download',
+    processingStatus: 'pending',
   }).returning();
 
   // Create draft episode linked to this asset
@@ -64,12 +68,19 @@ export async function addYouTubeVideo(params: {
     episodeType: 'full',
   }).returning();
 
-  log.info({ videoId, assetId, episodeId, feedId: feed.id }, 'YouTube video awaiting local download');
+  // Enqueue server-side download + processing
+  await enqueueProcessingJob({
+    assetId,
+    userId: params.userId,
+    targetFormat: 'mp3',
+  });
+
+  log.info({ videoId, assetId, episodeId, feedId: feed.id }, 'YouTube video enqueued for server-side processing');
 
   return {
     videoId,
     assetId,
     episodeId,
-    status: 'pending_download',
+    status: 'pending',
   };
 }

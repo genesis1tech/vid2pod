@@ -3,17 +3,16 @@
 /**
  * Vid2Pod Local Agent
  *
- * Runs on your machine, polls the server for pending YouTube downloads,
- * uses yt-dlp with your browser's cookies to download audio locally,
- * then uploads the result to the server for processing.
+ * DEPRECATED: The server now downloads YouTube audio directly.
+ * You no longer need to run this agent. Just paste a YouTube URL
+ * in the web UI and the server handles everything.
  *
- * Usage:
- *   node agent/vid2pod-agent.mjs --server https://vid2pod.g1tech.cloud --email you@email.com --password yourpass
+ * This file is kept for backward compatibility only.
  *
- *   Or set environment variables:
- *     VID2POD_SERVER=https://vid2pod.g1tech.cloud
- *     VID2POD_EMAIL=you@email.com
- *     VID2POD_PASSWORD=yourpass
+ * Previously:
+ *   Runs on your machine, polls the server for pending YouTube downloads,
+ *   uses yt-dlp with your browser's cookies to download audio locally,
+ *   then uploads the result to the server for processing.
  */
 
 import { execFile } from 'child_process';

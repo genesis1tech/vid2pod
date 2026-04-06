@@ -188,9 +188,8 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
       xml += `      <itunes:episode>${ep.episodeNumber}</itunes:episode>\n`;
     }
 
-    if (ep.imageUrl) {
-      xml += `      <itunes:image href="${escapeXml(ep.imageUrl)}"/>\n`;
-    }
+    // Episode-level images are only for the web UI, not the RSS feed.
+    // Podcast apps use the feed-level cover image.
 
     xml += `      <content:encoded><![CDATA[${ep.description}]]></content:encoded>\n`;
     xml += `    </item>\n`;

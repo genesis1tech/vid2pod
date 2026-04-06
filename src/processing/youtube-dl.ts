@@ -53,19 +53,27 @@ export async function downloadAudio(videoId: string): Promise<YtDlpResult> {
     '--write-info-json',
     '--no-playlist',
     '--no-overwrites',
+    '--max-filesize', '500m',
     '--js-runtimes', 'node',
     '--remote-components', 'ejs:github',
   ];
 
   // Use cookies file if available (for authenticated downloads)
-  const cookiesPath = join(process.cwd(), 'cookies.txt');
-  try {
-    const { access } = await import('fs/promises');
-    await access(cookiesPath);
-    args.push('--cookies', cookiesPath);
-    log.info('Using cookies.txt for YouTube authentication');
-  } catch {
-    // No cookies file, proceed without
+  // Check tmpdir location first (new), then cwd (legacy fallback)
+  const { access } = await import('fs/promises');
+  const cookiesPaths = [
+    join(tmpdir(), 'vid2pod', 'cookies.txt'),
+    join(process.cwd(), 'cookies.txt'),
+  ];
+  for (const cookiesPath of cookiesPaths) {
+    try {
+      await access(cookiesPath);
+      args.push('--cookies', cookiesPath);
+      log.info({ cookiesPath }, 'Using cookies.txt for YouTube authentication');
+      break;
+    } catch {
+      // Try next location
+    }
   }
 
   args.push(`https://www.youtube.com/watch?v=${videoId}`);

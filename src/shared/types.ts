@@ -13,7 +13,7 @@ export type LicenseStatus = 'attested' | 'verified' | 'expired' | 'revoked';
 
 export type AssetSourceType = 'audio_upload' | 'stream_url' | 'licensed_file';
 
-export type ProcessingStatus = 'pending_download' | 'pending' | 'processing' | 'completed' | 'failed';
+export type ProcessingStatus = 'pending_download' | 'downloading' | 'pending' | 'processing' | 'completed' | 'failed';
 
 export type FeedVisibility = 'public' | 'unlisted' | 'private';
 

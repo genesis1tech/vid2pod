@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
+import { clerkPlugin } from '@clerk/fastify';
 import { ZodError } from 'zod';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -27,6 +28,21 @@ export async function createServer() {
 
   await app.register(cors, { origin: true });
   await app.register(multipart, { limits: { fileSize: 500 * 1024 * 1024 } });
+
+  // Clerk JWT verification plugin (skip in test mode — tests use token bypass)
+  if (config.NODE_ENV !== 'test') {
+    await app.register(clerkPlugin);
+  }
+
+  // Raw body support for webhook signature verification
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    try {
+      (req as any).rawBody = body;
+      done(null, JSON.parse(body as string));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  });
 
   app.addHook('onRequest', (request, reply, done) => {
     log.info({ method: request.method, url: request.url }, 'Incoming request');
