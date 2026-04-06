@@ -4,13 +4,15 @@ import { useAuth, apiFetch } from '../hooks/useAuth.js';
 
 export function AssetUploader() {
   const { assets, loading, uploadAsset, processAsset } = useAssets();
-  const { token } = useAuth();
+  const { getToken } = useAuth();
   const [licenses, setLicenses] = useState<any[]>([]);
   const [selectedLicense, setSelectedLicense] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
   useState(() => {
-    if (token) apiFetch('/api/v1/licenses', token).then(setLicenses);
+    getToken().then(token => {
+      if (token) apiFetch('/api/v1/licenses', token).then(setLicenses);
+    });
   });
 
   const handleUpload = async () => {
