@@ -17,11 +17,22 @@ export async function provisionUser(clerkId: string, email: string, displayName?
   const db = getDb();
   const config = getConfig();
 
-  // Check if user already exists (idempotent)
-  const existing = await db.select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
-  if (existing.length > 0) {
+  // Check if user already exists by clerkId (idempotent)
+  const existingByClerk = await db.select().from(users).where(eq(users.clerkId, clerkId)).limit(1);
+  if (existingByClerk.length > 0) {
     log.info({ clerkId, email }, 'User already provisioned, skipping');
-    return existing[0];
+    return existingByClerk[0];
+  }
+
+  // Check if a legacy user exists with this email (pre-Clerk migration)
+  const existingByEmail = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  if (existingByEmail.length > 0) {
+    // Link the existing user to their Clerk account
+    await db.update(users)
+      .set({ clerkId, updatedAt: new Date() })
+      .where(eq(users.id, existingByEmail[0].id));
+    log.info({ clerkId, email, userId: existingByEmail[0].id }, 'Linked existing user to Clerk');
+    return existingByEmail[0];
   }
 
   const id = uuid();
