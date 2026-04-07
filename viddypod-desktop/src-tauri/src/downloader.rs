@@ -46,9 +46,21 @@ pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadR
 
     log::info!("Downloading {} via {}", video_id, browser);
 
+    // Build an enriched PATH so yt-dlp can find `node` in non-system locations.
+    // GUI apps on macOS launched from Finder don't inherit the user's shell PATH,
+    // so /opt/homebrew/bin and /usr/local/bin are missing by default.
+    let current_path = std::env::var("PATH").unwrap_or_default();
+    let extra_paths = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
+    let enriched_path = if current_path.is_empty() {
+        extra_paths.to_string()
+    } else {
+        format!("{}:{}", extra_paths, current_path)
+    };
+
     let shell = app.shell();
     let (mut rx, _child) = shell
         .sidecar("yt-dlp")?
+        .env("PATH", enriched_path)
         .args([
             "--extract-audio",
             "--audio-format", "mp3",
