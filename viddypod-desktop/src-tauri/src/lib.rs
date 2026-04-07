@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -5,6 +6,8 @@ use tauri::{
     AppHandle, Emitter, Manager, RunEvent,
 };
 use tokio::sync::Mutex;
+
+static QUITTING: AtomicBool = AtomicBool::new(false);
 
 mod auth;
 mod downloader;
@@ -102,6 +105,7 @@ pub fn run() {
                             .open(SERVER_URL.to_string(), None);
                     }
                     "quit" => {
+                        QUITTING.store(true, Ordering::SeqCst);
                         app.exit(0);
                     }
                     _ => {}
@@ -137,9 +141,12 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
-            // Prevent app from exiting when window closed (we live in tray)
+            // Prevent app from exiting when window closed (we live in tray),
+            // unless the user explicitly clicked Quit from the tray menu.
             if let RunEvent::ExitRequested { api, .. } = event {
-                api.prevent_exit();
+                if !QUITTING.load(Ordering::SeqCst) {
+                    api.prevent_exit();
+                }
             }
         });
 }
