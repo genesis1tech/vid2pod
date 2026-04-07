@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm';
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: text('email').notNull().unique(),
-  passwordHash: text('password_hash').notNull(),
+  passwordHash: text('password_hash'),
   displayName: text('display_name'),
   role: text('role', { enum: ['admin', 'editor', 'viewer'] }).notNull().default('editor'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
