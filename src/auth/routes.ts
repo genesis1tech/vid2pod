@@ -4,6 +4,7 @@ import { authMiddleware } from './middleware.js';
 import { generateApiKey, hashApiKey } from './api-keys.js';
 import { getDb } from '../db/client.js';
 import { apiTokens } from '../db/schema.js';
+import { sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 const registerSchema = z.object({
@@ -41,18 +42,47 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/api/v1/auth/agent-token', {
     preHandler: [authMiddleware],
   }, async (request, reply) => {
-    const rawToken = generateApiKey();
-    const tokenHash = hashApiKey(rawToken);
-    const tokenPrefix = rawToken.slice(0, 12);
+    try {
+      const rawToken = generateApiKey();
+      const tokenHash = hashApiKey(rawToken);
+      const tokenPrefix = rawToken.slice(0, 12);
 
-    const db = getDb();
-    await db.insert(apiTokens).values({
-      userId: request.userId!,
-      name: 'ViddyPod Desktop Agent',
-      tokenHash,
-      tokenPrefix,
-    });
+      const db = getDb();
 
-    return reply.send({ token: rawToken });
+      // Self-healing migration: ensure the table exists.
+      // This is a no-op if start.sh already ran the migration.
+      try {
+        await db.execute(sql`
+          CREATE TABLE IF NOT EXISTS api_tokens (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            token_prefix TEXT NOT NULL,
+            last_used_at TIMESTAMPTZ,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )
+        `);
+        await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS agent_last_seen TIMESTAMPTZ`);
+      } catch (migErr: any) {
+        request.log.warn({ migErr: migErr.message }, 'Self-heal migration failed (may already exist)');
+      }
+
+      await db.insert(apiTokens).values({
+        userId: request.userId!,
+        name: 'ViddyPod Desktop Agent',
+        tokenHash,
+        tokenPrefix,
+      });
+
+      return reply.send({ token: rawToken });
+    } catch (err: any) {
+      request.log.error({ err: err.message, stack: err.stack }, 'agent-token failed');
+      return reply.status(500).send({
+        error: 'INTERNAL_ERROR',
+        message: err.message || 'Unknown error',
+        detail: err.code || err.name,
+      });
+    }
   });
 }
