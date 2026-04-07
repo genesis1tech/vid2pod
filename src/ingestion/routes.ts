@@ -192,11 +192,14 @@ export async function ingestionRoutes(app: FastifyInstance) {
     if (feedRows.length === 0) throw new (await import('../shared/errors.js')).NotFoundError('Feed');
     const feed = feedRows[0];
 
-    const { generateCoverImage } = await import('../rss/cover-generator.js');
     const { uploadToPodcastBucket } = await import('../publishing/storage.js');
     const config = (await import('../config.js')).getConfig();
+    const { readFile } = await import('fs/promises');
+    const { resolve, dirname } = await import('path');
+    const { fileURLToPath } = await import('url');
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const coverBuffer = await readFile(resolve(__dirname, '../../static/viddypod-cover.png'));
 
-    const coverBuffer = await generateCoverImage(feed.title);
     const coverKey = `covers/${request.userId}/${feedId}.png`;
     await uploadToPodcastBucket(coverKey, coverBuffer, 'image/png');
     const imageUrl = `${config.BASE_URL}/storage/${coverKey}`;
