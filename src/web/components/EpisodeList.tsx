@@ -1,3 +1,5 @@
+import { useAuth, apiFetch } from '../hooks/useAuth.js';
+
 interface Episode {
   id: string;
   title: string;
@@ -12,6 +14,7 @@ interface Episode {
 interface EpisodeListProps {
   episodes: Episode[];
   loading: boolean;
+  onRefresh: () => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -29,10 +32,11 @@ function statusBadge(status: string) {
     draft: 'bg-(--color-warning)/20 text-(--color-warning)',
     scheduled: 'bg-(--color-primary)/20 text-(--color-primary)',
     processing: 'bg-(--color-warning)/20 text-(--color-warning)',
+    retired: 'bg-(--color-surface) text-(--color-text-muted)',
   };
   const labels: Record<string, string> = {
     published: 'Ready',
-    draft: 'Downloading...',
+    draft: 'Pending',
     scheduled: 'Scheduled',
     retired: 'Archived',
   };
@@ -43,7 +47,19 @@ function statusBadge(status: string) {
   );
 }
 
-export function EpisodeList({ episodes, loading }: EpisodeListProps) {
+export function EpisodeList({ episodes, loading, onRefresh }: EpisodeListProps) {
+  const { getToken } = useAuth();
+
+  const handleDelete = async (episodeId: string) => {
+    try {
+      const token = await getToken();
+      await apiFetch(`/api/v1/episodes/${episodeId}`, token, { method: 'DELETE' });
+      onRefresh();
+    } catch (err: any) {
+      console.error('Failed to delete episode:', err.message);
+    }
+  };
+
   if (loading) {
     return <div className="text-(--color-text-muted) text-center py-8">Loading your library...</div>;
   }
@@ -81,7 +97,17 @@ export function EpisodeList({ episodes, loading }: EpisodeListProps) {
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="font-medium text-sm sm:text-base leading-tight line-clamp-2">{ep.title}</h3>
-                {statusBadge(ep.status)}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {statusBadge(ep.status)}
+                  {ep.status === 'draft' && (
+                    <button
+                      onClick={() => handleDelete(ep.id)}
+                      className="text-xs text-(--color-danger) hover:underline"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="text-xs sm:text-sm text-(--color-text-muted) mt-1 line-clamp-1">{ep.description}</p>
               <div className="flex items-center gap-3 mt-2 text-xs text-(--color-text-muted)">

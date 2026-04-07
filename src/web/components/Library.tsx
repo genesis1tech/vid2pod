@@ -101,7 +101,7 @@ export function Library() {
           )}
 
           <AddVideo onAdded={refreshEpisodes} />
-          <EpisodeList episodes={episodes} loading={loading} />
+          <EpisodeList episodes={episodes} loading={loading} onRefresh={refreshEpisodes} />
         </div>
       </main>
     </div>
