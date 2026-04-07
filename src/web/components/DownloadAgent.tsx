@@ -2,10 +2,18 @@ import { useState, useEffect } from 'react';
 import { useAuth, apiFetch } from '../hooks/useAuth.js';
 
 const GITHUB_RELEASE_URL = 'https://github.com/genesis1tech/vid2pod/releases/latest';
+// Use the GitHub Releases page (not direct file URL) so users always get the latest .dmg/.msi
+// regardless of version numbers in the filename.
 
 function detectOS(): { label: string; key: string } {
   const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes('mac')) return { label: 'macOS', key: 'macos' };
+  if (ua.includes('mac')) {
+    // Apple Silicon detection — Apple's user agent doesn't reveal arch directly,
+    // but ARM Macs report (Macintosh; Intel Mac OS X 10_15_7) for compat reasons.
+    // Best signal: check navigator.platform/userAgentData
+    const isArm = (navigator as any).userAgentData?.platform === 'macOS' && (navigator as any).userAgentData?.architecture === 'arm';
+    return { label: 'macOS', key: isArm ? 'macos-arm64' : 'macos' };
+  }
   if (ua.includes('win')) return { label: 'Windows', key: 'windows' };
   return { label: 'Linux', key: 'linux' };
 }
