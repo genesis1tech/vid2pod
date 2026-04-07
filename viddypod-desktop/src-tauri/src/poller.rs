@@ -15,22 +15,21 @@ struct PendingAsset {
     youtube_video_id: Option<String>,
 }
 
-const POLL_INTERVAL: Duration = Duration::from_secs(30);
+const POLL_INTERVAL: Duration = Duration::from_secs(15);
 
 pub async fn run_poller(app: AppHandle, state: Arc<Mutex<AppState>>) {
     log::info!("Poller started");
-    let mut ticker = tokio::time::interval(POLL_INTERVAL);
-    ticker.tick().await; // first tick is immediate
 
     loop {
-        ticker.tick().await;
-
         let token = {
             let s = state.lock().await;
             s.token.clone()
         };
 
         let Some(token) = token else {
+            // No token yet — wait briefly before checking again so a fresh
+            // sign-in is picked up within 1 second instead of 30.
+            tokio::time::sleep(Duration::from_secs(1)).await;
             continue;
         };
 
@@ -69,6 +68,9 @@ pub async fn run_poller(app: AppHandle, state: Arc<Mutex<AppState>>) {
                 log::warn!("Poll failed: {}", e);
             }
         }
+
+        // Sleep until the next poll interval
+        tokio::time::sleep(POLL_INTERVAL).await;
     }
 }
 

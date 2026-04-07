@@ -43,7 +43,7 @@ export function DownloadAgent() {
       }
     };
     check();
-    const interval = setInterval(check, 30000);
+    const interval = setInterval(check, 5000);
     return () => { mounted = false; clearInterval(interval); };
   }, [token]);
 
