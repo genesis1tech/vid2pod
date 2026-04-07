@@ -5,7 +5,7 @@ import { authMiddleware } from '../auth/middleware.js';
 import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
-import { assets, episodes, feeds } from '../db/schema.js';
+import { assets, episodes, feeds, users } from '../db/schema.js';
 import { getConfig } from '../config.js';
 import { uploadFile, uploadToPodcastBucket } from '../publishing/storage.js';
 import { enqueueProcessingJob } from '../processing/jobs.js';
@@ -33,17 +33,20 @@ const youtubeMetaSchema = z.object({
 });
 
 export async function ingestionRoutes(app: FastifyInstance) {
-  // Agent endpoints — DEPRECATED: server now downloads YouTube audio directly.
-  // Kept for backward compatibility with local agents still running.
+  // Agent endpoints — local agent polls for pending downloads and uploads results.
+  // Primary download path: agent runs on user's machine with residential IP.
 
-  // List videos waiting for local download (deprecated — returns empty for new assets)
+  // List videos waiting for agent download
   app.get('/api/v1/agent/pending', {
     preHandler: [authMiddleware],
   }, async (request, reply) => {
-    reply.header('Deprecation', 'true');
-    reply.header('Sunset', '2026-07-01');
-    log.warn('Deprecated /api/v1/agent/pending called — server-side downloading is now the default');
     const db = getDb();
+
+    // Update agent last seen timestamp
+    await db.update(users)
+      .set({ agentLastSeen: new Date() })
+      .where(eq(users.id, request.userId!));
+
     return db.select().from(assets)
       .where(and(
         eq(assets.userId, request.userId!),
@@ -51,13 +54,10 @@ export async function ingestionRoutes(app: FastifyInstance) {
       ));
   });
 
-  // Agent uploads downloaded audio for an asset (deprecated — server downloads directly)
+  // Agent uploads downloaded audio for an asset
   app.post('/api/v1/agent/upload/:assetId', {
     preHandler: [authMiddleware],
   }, async (request, reply) => {
-    reply.header('Deprecation', 'true');
-    reply.header('Sunset', '2026-07-01');
-    log.warn('Deprecated /api/v1/agent/upload called — server-side downloading is now the default');
     const { assetId } = request.params as { assetId: string };
     const data = await request.file();
     if (!data) throw new ValidationError('No file provided');

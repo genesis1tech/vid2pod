@@ -11,6 +11,7 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash'),
   displayName: text('display_name'),
   youtubeCookies: text('youtube_cookies'),
+  agentLastSeen: timestamp('agent_last_seen', { withTimezone: true }),
   role: text('role', { enum: ['admin', 'editor', 'viewer'] }).notNull().default('editor'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

@@ -74,6 +74,29 @@ export async function authRoutes(app: FastifyInstance) {
     return getUser(request.userId!);
   });
 
+  // Generate a long-lived agent token for the ViddyPod Agent
+  app.post('/api/v1/auth/agent-token', {
+    preHandler: [authMiddleware],
+  }, async (request) => {
+    const { getDb } = await import('../db/client.js');
+    const { users } = await import('../db/schema.js');
+    const { eq } = await import('drizzle-orm');
+    const db = getDb();
+
+    const userRows = await db.select({ id: users.id, email: users.email })
+      .from(users).where(eq(users.id, request.userId!)).limit(1);
+    if (userRows.length === 0) throw new Error('User not found');
+
+    const config = (await import('../config.js')).getConfig();
+
+    // Return connection info for the agent
+    return {
+      server: config.BASE_URL,
+      userId: userRows[0].id,
+      email: userRows[0].email,
+    };
+  });
+
   // Save YouTube cookies for the current user
   app.post('/api/v1/auth/youtube-cookies', {
     preHandler: [authMiddleware],

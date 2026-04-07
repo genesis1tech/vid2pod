@@ -32,13 +32,14 @@ export interface ProcessingJobData {
   targetFormat?: 'mp3' | 'm4a';
 }
 
-export async function enqueueProcessingJob(data: ProcessingJobData) {
+export async function enqueueProcessingJob(data: ProcessingJobData, options?: { delay?: number }) {
   const queue = getProcessingQueue();
   const job = await queue.add('process-asset', data, {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },
+    ...(options?.delay && { delay: options.delay }),
   });
-  log.info({ jobId: job.id, assetId: data.assetId }, 'Processing job enqueued');
+  log.info({ jobId: job.id, assetId: data.assetId, delay: options?.delay }, 'Processing job enqueued');
   return job;
 }
 

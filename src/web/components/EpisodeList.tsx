@@ -32,8 +32,9 @@ function statusBadge(status: string) {
   };
   const labels: Record<string, string> = {
     published: 'Ready',
-    draft: 'Processing',
+    draft: 'Downloading...',
     scheduled: 'Scheduled',
+    retired: 'Archived',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full ${styles[status] || 'bg-(--color-surface) text-(--color-text-muted)'}`}>

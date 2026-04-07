@@ -51,7 +51,7 @@ export async function addYouTubeVideo(params: {
     sourceType: 'stream_url',
     youtubeVideoId: videoId,
     streamUrl: `https://www.youtube.com/watch?v=${videoId}`,
-    processingStatus: 'pending',
+    processingStatus: 'pending_download',
   }).returning();
 
   // Create draft episode linked to this asset
@@ -68,19 +68,21 @@ export async function addYouTubeVideo(params: {
     episodeType: 'full',
   }).returning();
 
-  // Enqueue server-side download + processing
+  // Enqueue server-side processing as fallback (5 min delay).
+  // If the local agent picks up the download first, the server job
+  // will find a storageKey already set and skip the download step.
   await enqueueProcessingJob({
     assetId,
     userId: params.userId,
     targetFormat: 'mp3',
-  });
+  }, { delay: 5 * 60 * 1000 });
 
-  log.info({ videoId, assetId, episodeId, feedId: feed.id }, 'YouTube video enqueued for server-side processing');
+  log.info({ videoId, assetId, episodeId, feedId: feed.id }, 'YouTube video awaiting agent download (server fallback in 5m)');
 
   return {
     videoId,
     assetId,
     episodeId,
-    status: 'pending',
+    status: 'pending_download',
   };
 }
