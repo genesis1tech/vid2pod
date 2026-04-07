@@ -1,6 +1,6 @@
 import { getDb } from '../db/client.js';
 import { assets, episodes, feeds } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
 import { extractVideoId } from '../processing/youtube-dl.js';
 import { createChildLogger } from '../shared/logger.js';
@@ -29,13 +29,16 @@ export async function addYouTubeVideo(params: {
   }
   const feed = feedRows[0];
 
-  // Check for duplicate video
+  // Check for duplicate video within this user's library
   const existingAssets = await db.select().from(assets)
-    .where(eq(assets.youtubeVideoId, videoId))
+    .where(and(
+      eq(assets.youtubeVideoId, videoId),
+      eq(assets.userId, params.userId),
+    ))
     .limit(1);
 
   if (existingAssets.length > 0) {
-    throw new ValidationError(`Video ${videoId} has already been added`);
+    throw new ValidationError(`Video ${videoId} is already in your library`);
   }
 
   // Create asset record — pending_download means local agent needs to download it
