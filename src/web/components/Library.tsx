@@ -63,7 +63,7 @@ export function Library() {
       {/* Header */}
       <header className="border-b border-(--color-border) px-4 py-3 sm:px-6">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <h1 className="text-lg sm:text-xl font-bold text-(--color-primary)">Vid2Pod</h1>
+          <h1 className="text-lg sm:text-xl font-bold text-(--color-primary)">ViddyPod</h1>
           <div className="flex items-center gap-3">
             <span className="text-sm text-(--color-text-muted) hidden sm:inline">{user?.email}</span>
             <button onClick={logout} className="text-sm text-(--color-danger)">Sign out</button>

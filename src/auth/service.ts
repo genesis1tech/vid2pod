@@ -8,8 +8,10 @@ import { signAccessToken, signRefreshToken, JwtPayload } from './jwt.js';
 import { createChildLogger } from '../shared/logger.js';
 import { AppError, NotFoundError } from '../shared/errors.js';
 import { getConfig } from '../config.js';
-import { generateCoverImage } from '../rss/cover-generator.js';
 import { uploadToPodcastBucket } from '../publishing/storage.js';
+import { readFile } from 'fs/promises';
+import { resolve, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 const log = createChildLogger('auth-service');
 
@@ -37,10 +39,13 @@ export async function register(email: string, password: string, displayName?: st
   const feedId = uuid();
   const feedName = displayName || email.split('@')[0];
 
-  const feedTitle = `${feedName}'s Podcast Library`;
+  const firstName = feedName.split(/\s+/)[0];
+  const feedTitle = `${firstName}'s ViddyPod`;
 
-  // Generate cover image
-  const coverBuffer = await generateCoverImage(feedTitle);
+  // Use the static ViddyPod cover image
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const coverPath = resolve(__dirname, '../../static/viddypod-cover.png');
+  const coverBuffer = await readFile(coverPath);
   const coverKey = `covers/${id}/cover.png`;
   await uploadToPodcastBucket(coverKey, coverBuffer, 'image/png');
   const imageUrl = `${config.BASE_URL}/storage/${coverKey}`;
@@ -49,7 +54,7 @@ export async function register(email: string, password: string, displayName?: st
     id: feedId,
     userId: id,
     title: feedTitle,
-    description: `Personal podcast feed for ${feedName}`,
+    description: `${firstName}'s personal podcast feed`,
     author: feedName,
     categoryPrimary: 'Technology',
     ownershipToken,

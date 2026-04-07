@@ -31,7 +31,7 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="card w-96">
-        <h1 className="text-2xl font-bold mb-6 text-center">Vid2Pod</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center">ViddyPod</h1>
         <h2 className="text-lg mb-4 text-center text-[var(--color-text-muted)]">
           {isRegister ? 'Create Account' : 'Sign In'}
         </h2>
