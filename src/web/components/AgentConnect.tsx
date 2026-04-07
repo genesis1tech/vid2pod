@@ -13,6 +13,7 @@ export function AgentConnect() {
       try {
         const result = await apiFetch<{ token: string }>('/api/v1/auth/agent-token', token, {
           method: 'POST',
+          body: '{}',
         });
         if (cancelled) return;
         // Redirect to the desktop app's deep link handler
