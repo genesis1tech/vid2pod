@@ -1,0 +1,35 @@
+[package]
+name = "viddypod-desktop"
+version = "0.1.0"
+description = "ViddyPod Desktop Agent — downloads YouTube videos for your personal podcast feed"
+authors = ["Genesis 1 Technologies LLC"]
+edition = "2021"
+
+[lib]
+name = "viddypod_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+anyhow = "1"
+url = "2"
+once_cell = "1"
+chrono = { version = "0.4", features = ["serde"] }
+log = "0.4"
+env_logger = "0.11"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

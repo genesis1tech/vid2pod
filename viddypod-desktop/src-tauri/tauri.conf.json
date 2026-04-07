@@ -1,0 +1,55 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "ViddyPod",
+  "version": "0.1.0",
+  "identifier": "cloud.g1tech.viddypod",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "ViddyPod Agent",
+        "width": 420,
+        "height": 560,
+        "resizable": false,
+        "center": true,
+        "visible": false,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://vid2pod.g1tech.cloud"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["dmg", "app", "msi", "deb", "appimage"],
+    "icon": [
+      "icons/icon.png"
+    ],
+    "category": "Utility",
+    "shortDescription": "ViddyPod Desktop Agent",
+    "longDescription": "Downloads YouTube videos to your ViddyPod personal podcast feed.",
+    "macOS": {
+      "minimumSystemVersion": "10.15"
+    },
+    "externalBin": [
+      "binaries/yt-dlp"
+    ]
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["viddypod"]
+      }
+    },
+    "updater": {
+      "active": false
+    }
+  }
+}
