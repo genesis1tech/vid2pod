@@ -5,7 +5,7 @@ import { authMiddleware } from '../auth/middleware.js';
 import { z } from 'zod';
 import { eq, and } from 'drizzle-orm';
 import { getDb } from '../db/client.js';
-import { assets, episodes, feeds, users } from '../db/schema.js';
+import { assets, episodes, feeds } from '../db/schema.js';
 import { getConfig } from '../config.js';
 import { uploadFile, uploadToPodcastBucket } from '../publishing/storage.js';
 import { enqueueProcessingJob } from '../processing/jobs.js';
@@ -19,8 +19,6 @@ const addVideoSchema = z.object({
   url: z.string().url(),
 });
 
-
-
 const addStreamSchema = z.object({
   licenseId: z.string().uuid(),
   streamUrl: z.string().url(),
@@ -33,20 +31,13 @@ const youtubeMetaSchema = z.object({
 });
 
 export async function ingestionRoutes(app: FastifyInstance) {
-  // Agent endpoints — local agent polls for pending downloads and uploads results.
-  // Primary download path: agent runs on user's machine with residential IP.
+  // Agent endpoints — local agent polls for pending downloads and uploads results
 
   // List videos waiting for agent download
   app.get('/api/v1/agent/pending', {
     preHandler: [authMiddleware],
-  }, async (request, reply) => {
+  }, async (request) => {
     const db = getDb();
-
-    // Update agent last seen timestamp
-    await db.update(users)
-      .set({ agentLastSeen: new Date() })
-      .where(eq(users.id, request.userId!));
-
     return db.select().from(assets)
       .where(and(
         eq(assets.userId, request.userId!),
@@ -84,6 +75,7 @@ export async function ingestionRoutes(app: FastifyInstance) {
     const title = getField('title');
     const description = getField('description');
     const duration = getField('duration');
+    const thumbnail = getField('thumbnail');
 
     // Upload to storage
     const storageKey = `assets/${request.userId}/${assetId}/${data.filename || 'audio.mp3'}`;
@@ -110,6 +102,7 @@ export async function ingestionRoutes(app: FastifyInstance) {
           ...(title && { title }),
           ...(description && { description }),
           ...(duration && { durationSeconds: Math.round(parseFloat(duration)) }),
+          ...(thumbnail && { imageUrl: thumbnail }),
           updatedAt: new Date(),
         }).where(eq(episodes.id, ep.id));
       }
@@ -137,13 +130,13 @@ export async function ingestionRoutes(app: FastifyInstance) {
       .where(and(eq(feeds.id, feedId), eq(feeds.userId, request.userId!)))
       .limit(1);
     if (feedRows.length === 0) throw new NotFoundError('Feed');
-    const feed = feedRows[0];
 
     const { readFile } = await import('fs/promises');
     const { resolve, dirname } = await import('path');
     const { fileURLToPath } = await import('url');
     const __dirname = dirname(fileURLToPath(import.meta.url));
     const coverBuffer = await readFile(resolve(__dirname, '../../static/viddypod-cover.png'));
+
     const coverKey = `covers/${request.userId}/${feedId}.png`;
     await uploadToPodcastBucket(coverKey, coverBuffer, 'image/png');
     const imageUrl = `${config.BASE_URL}/storage/${coverKey}`;
@@ -154,8 +147,6 @@ export async function ingestionRoutes(app: FastifyInstance) {
 
     return reply.status(200).send({ ok: true, imageUrl });
   });
-
-
 
   // Primary endpoint: add a YouTube video to personal library
   app.post('/api/v1/videos', {

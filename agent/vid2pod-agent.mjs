@@ -41,19 +41,21 @@ function getArg(name) {
 }
 
 const SERVER = getArg('server') || process.env.VID2POD_SERVER || savedConfig.server || 'https://vid2pod.g1tech.cloud';
+const TOKEN_ARG = getArg('token') || process.env.VID2POD_TOKEN || savedConfig.token;
 const EMAIL = getArg('email') || process.env.VID2POD_EMAIL || savedConfig.email;
 const PASSWORD = getArg('password') || process.env.VID2POD_PASSWORD || savedConfig.password;
 const POLL_INTERVAL = parseInt(getArg('interval') || process.env.VID2POD_POLL_INTERVAL || savedConfig.interval || '30', 10) * 1000;
 const BROWSER = getArg('browser') || process.env.VID2POD_BROWSER || savedConfig.browser || 'chrome';
 const DOWNLOAD_DIR = getArg('download-dir') || process.env.VID2POD_DOWNLOAD_DIR || join(homedir(), 'Vid2Pod');
 
-if (!EMAIL || !PASSWORD) {
-  console.error('Usage: vid2pod-agent --server URL --email EMAIL --password PASSWORD');
-  console.error('  Or set VID2POD_SERVER, VID2POD_EMAIL, VID2POD_PASSWORD environment variables');
+if (!TOKEN_ARG && !EMAIL) {
+  console.error('Usage: vid2pod-agent --server URL --token CLERK_TOKEN');
+  console.error('  Or:  vid2pod-agent --server URL --email EMAIL --password PASSWORD');
+  console.error('  Or set VID2POD_SERVER + VID2POD_TOKEN environment variables');
   process.exit(1);
 }
 
-let token = null;
+let token = TOKEN_ARG || null;
 
 function log(msg, data) {
   const ts = new Date().toISOString().slice(11, 19);
@@ -61,6 +63,10 @@ function log(msg, data) {
 }
 
 async function login() {
+  if (token) {
+    log('Using provided token');
+    return;
+  }
   const res = await fetch(`${SERVER}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

@@ -64,59 +64,8 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
   try {
     let inputPath: string;
 
-    // YouTube download path: asset has youtubeVideoId but no storageKey yet
-    if (asset.youtubeVideoId && !asset.storageKey) {
-      const { downloadAudio } = await import('./youtube-dl.js');
-      const { users } = await import('../db/schema.js');
-
-      await db.update(assets)
-        .set({ processingStatus: 'downloading', updatedAt: new Date() })
-        .where(eq(assets.id, asset.id));
-
-      // Fetch user's YouTube cookies
-      const userRows = await db.select({ youtubeCookies: users.youtubeCookies })
-        .from(users).where(eq(users.id, asset.userId)).limit(1);
-      const userCookies = userRows[0]?.youtubeCookies || null;
-
-      const ytResult = await downloadAudio(asset.youtubeVideoId, userCookies);
-      workDir = ytResult.workDir;
-
-      // Upload downloaded audio to S3
-      const audioBuffer = await readFile(ytResult.audioPath);
-      const safeVideoId = /^[a-zA-Z0-9_-]{11}$/.test(asset.youtubeVideoId!)
-        ? asset.youtubeVideoId!
-        : asset.id;
-      const storageKey = `assets/${asset.userId}/${asset.id}/${safeVideoId}.mp3`;
-      await uploadFile(storageKey, audioBuffer, 'audio/mpeg');
-
-      // Update asset with storage info
-      await db.update(assets)
-        .set({
-          storageKey,
-          originalFilename: `${asset.youtubeVideoId}.mp3`,
-          mimeType: 'audio/mpeg',
-          fileSizeBytes: audioBuffer.length,
-          processingStatus: 'processing',
-          updatedAt: new Date(),
-        })
-        .where(eq(assets.id, asset.id));
-
-      // Update linked episodes with YouTube metadata (title, description, duration)
-      const linkedEps = await db.select().from(episodes)
-        .where(eq(episodes.assetId, asset.id));
-
-      for (const ep of linkedEps) {
-        await db.update(episodes).set({
-          title: ytResult.metadata.title,
-          description: ytResult.metadata.description || ytResult.metadata.title,
-          ...(ytResult.metadata.duration && { durationSeconds: Math.round(ytResult.metadata.duration) }),
-          ...(ytResult.metadata.thumbnail && { imageUrl: ytResult.metadata.thumbnail }),
-          updatedAt: new Date(),
-        }).where(eq(episodes.id, ep.id));
-      }
-
-      inputPath = ytResult.audioPath;
-    } else if (asset.storageKey) {
+    // Download source audio from S3 (agent-uploaded or direct upload)
+    if (asset.storageKey) {
       workDir = join(tmpdir(), `vid2pod-${asset.id}`);
       await mkdir(workDir, { recursive: true });
       const { getFile } = await import('../publishing/storage.js');

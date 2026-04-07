@@ -122,7 +122,6 @@ export function startScheduler(intervalMs?: number) {
 
   const tick = async () => {
     await processScheduledEpisodes();
-    await archiveOldEpisodes();
     await cleanupExpiredStorage();
   };
 

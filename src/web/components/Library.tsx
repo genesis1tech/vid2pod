@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from 'react';
 import { useAuth, apiFetch } from '../hooks/useAuth.js';
 import { AddVideo } from './AddVideo.js';
 import { EpisodeList } from './EpisodeList.js';
-import { AgentSetup } from './AgentSetup.js';
 import QRCode from 'qrcode';
 
 export function Library() {
@@ -101,7 +100,6 @@ export function Library() {
             </div>
           )}
 
-          <AgentSetup />
           <AddVideo onAdded={refreshEpisodes} />
           <EpisodeList episodes={episodes} loading={loading} />
         </div>

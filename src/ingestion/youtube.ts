@@ -3,7 +3,6 @@ import { assets, episodes, feeds } from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
 import { extractVideoId } from '../processing/youtube-dl.js';
-import { enqueueProcessingJob } from '../processing/jobs.js';
 import { createChildLogger } from '../shared/logger.js';
 import { ValidationError, NotFoundError } from '../shared/errors.js';
 
@@ -42,9 +41,9 @@ export async function addYouTubeVideo(params: {
     throw new ValidationError(`Video ${videoId} has already been added to your library`);
   }
 
-  // Create asset record — will be enqueued for server-side download
+  // Create asset record — pending_download means local agent needs to download it
   const assetId = uuid();
-  const [asset] = await db.insert(assets).values({
+  await db.insert(assets).values({
     id: assetId,
     userId: params.userId,
     licenseId: null,
@@ -57,7 +56,7 @@ export async function addYouTubeVideo(params: {
   // Create draft episode linked to this asset
   const episodeId = uuid();
   const guid = uuid();
-  const [episode] = await db.insert(episodes).values({
+  await db.insert(episodes).values({
     id: episodeId,
     feedId: feed.id,
     assetId: assetId,
@@ -68,16 +67,7 @@ export async function addYouTubeVideo(params: {
     episodeType: 'full',
   }).returning();
 
-  // Enqueue server-side processing as fallback (5 min delay).
-  // If the local agent picks up the download first, the server job
-  // will find a storageKey already set and skip the download step.
-  await enqueueProcessingJob({
-    assetId,
-    userId: params.userId,
-    targetFormat: 'mp3',
-  }, { delay: 5 * 60 * 1000 });
-
-  log.info({ videoId, assetId, episodeId, feedId: feed.id }, 'YouTube video awaiting agent download (server fallback in 5m)');
+  log.info({ videoId, assetId, episodeId, feedId: feed.id }, 'YouTube video awaiting agent download');
 
   return {
     videoId,
