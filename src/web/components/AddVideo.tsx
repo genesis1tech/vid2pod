@@ -6,20 +6,19 @@ interface AddVideoProps {
 }
 
 export function AddVideo({ onAdded }: AddVideoProps) {
-  const { getToken } = useAuth();
+  const { token } = useAuth();
   const [url, setUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url.trim()) return;
+    if (!url.trim() || !token) return;
 
     setSubmitting(true);
     setMessage(null);
 
     try {
-      const token = await getToken();
       await apiFetch('/api/v1/videos', token, {
         method: 'POST',
         body: JSON.stringify({ url: url.trim() }),

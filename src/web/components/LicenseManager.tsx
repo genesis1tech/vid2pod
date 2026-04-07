@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useAuth, apiFetch } from '../hooks/useAuth.js';
 
 export function LicenseManager() {
-  const { getToken } = useAuth();
+  const { token } = useAuth();
   const [licenses, setLicenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -15,9 +15,9 @@ export function LicenseManager() {
   });
 
   const refresh = async () => {
+    if (!token) return;
     setLoading(true);
     try {
-      const token = await getToken();
       const data = await apiFetch('/api/v1/licenses', token);
       setLicenses(data);
     } finally {
@@ -29,7 +29,6 @@ export function LicenseManager() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const token = await getToken();
     await apiFetch('/api/v1/licenses', token, {
       method: 'POST',
       body: JSON.stringify({

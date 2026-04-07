@@ -6,25 +6,12 @@ import { sql } from 'drizzle-orm';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
-  clerkId: text('clerk_id').unique(),
   email: text('email').notNull().unique(),
-  passwordHash: text('password_hash'),
+  passwordHash: text('password_hash').notNull(),
   displayName: text('display_name'),
-  youtubeCookies: text('youtube_cookies'),
-  agentLastSeen: timestamp('agent_last_seen', { withTimezone: true }),
   role: text('role', { enum: ['admin', 'editor', 'viewer'] }).notNull().default('editor'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
-export const apiKeys = pgTable('api_keys', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  keyHash: text('key_hash').notNull().unique(),
-  keyPrefix: text('key_prefix').notNull(), // First 8 chars for display
-  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const licenses = pgTable('licenses', {
@@ -63,7 +50,7 @@ export const assets = pgTable('assets', {
   checksumSha256: text('checksum_sha256'),
   metadata: jsonb('metadata').$type<{ duration?: number; bitrate?: number; sampleRate?: number; channels?: number; codec?: string }>(),
   processingStatus: text('processing_status', {
-    enum: ['pending_download', 'downloading', 'pending', 'processing', 'completed', 'failed'],
+    enum: ['pending_download', 'pending', 'processing', 'completed', 'failed'],
   }).notNull().default('pending'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

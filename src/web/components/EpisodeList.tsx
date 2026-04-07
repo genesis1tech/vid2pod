@@ -1,5 +1,3 @@
-import { useAuth, apiFetch } from '../hooks/useAuth.js';
-
 interface Episode {
   id: string;
   title: string;
@@ -14,7 +12,6 @@ interface Episode {
 interface EpisodeListProps {
   episodes: Episode[];
   loading: boolean;
-  onRefresh: () => void;
 }
 
 function formatDuration(seconds: number | null): string {
@@ -32,13 +29,11 @@ function statusBadge(status: string) {
     draft: 'bg-(--color-warning)/20 text-(--color-warning)',
     scheduled: 'bg-(--color-primary)/20 text-(--color-primary)',
     processing: 'bg-(--color-warning)/20 text-(--color-warning)',
-    retired: 'bg-(--color-surface) text-(--color-text-muted)',
   };
   const labels: Record<string, string> = {
     published: 'Ready',
-    draft: 'Pending',
+    draft: 'Processing',
     scheduled: 'Scheduled',
-    retired: 'Archived',
   };
   return (
     <span className={`text-xs px-2 py-0.5 rounded-full ${styles[status] || 'bg-(--color-surface) text-(--color-text-muted)'}`}>
@@ -47,19 +42,7 @@ function statusBadge(status: string) {
   );
 }
 
-export function EpisodeList({ episodes, loading, onRefresh }: EpisodeListProps) {
-  const { getToken } = useAuth();
-
-  const handleDelete = async (episodeId: string) => {
-    try {
-      const token = await getToken();
-      await apiFetch(`/api/v1/episodes/${episodeId}`, token, { method: 'DELETE' });
-      onRefresh();
-    } catch (err: any) {
-      console.error('Failed to delete episode:', err.message);
-    }
-  };
-
+export function EpisodeList({ episodes, loading }: EpisodeListProps) {
   if (loading) {
     return <div className="text-(--color-text-muted) text-center py-8">Loading your library...</div>;
   }
@@ -80,15 +63,15 @@ export function EpisodeList({ episodes, loading, onRefresh }: EpisodeListProps) 
       <div className="space-y-3">
         {episodes.map((ep) => (
           <div key={ep.id} className="card flex gap-3 sm:gap-4">
-            {/* Thumbnail (16:9 YouTube aspect ratio) */}
+            {/* Thumbnail */}
             {ep.imageUrl ? (
               <img
                 src={ep.imageUrl}
                 alt=""
-                className="w-28 h-16 sm:w-36 sm:h-20 rounded object-cover flex-shrink-0"
+                className="w-16 h-16 sm:w-20 sm:h-20 rounded object-cover flex-shrink-0"
               />
             ) : (
-              <div className="w-28 h-16 sm:w-36 sm:h-20 rounded bg-(--color-bg) flex-shrink-0 flex items-center justify-center text-(--color-text-muted) text-xs">
+              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded bg-(--color-bg) flex-shrink-0 flex items-center justify-center text-(--color-text-muted) text-xs">
                 No art
               </div>
             )}
@@ -97,17 +80,7 @@ export function EpisodeList({ episodes, loading, onRefresh }: EpisodeListProps) 
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2">
                 <h3 className="font-medium text-sm sm:text-base leading-tight line-clamp-2">{ep.title}</h3>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  {statusBadge(ep.status)}
-                  {ep.status === 'draft' && (
-                    <button
-                      onClick={() => handleDelete(ep.id)}
-                      className="text-xs text-(--color-danger) hover:underline"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
+                {statusBadge(ep.status)}
               </div>
               <p className="text-xs sm:text-sm text-(--color-text-muted) mt-1 line-clamp-1">{ep.description}</p>
               <div className="flex items-center gap-3 mt-2 text-xs text-(--color-text-muted)">

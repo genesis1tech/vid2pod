@@ -19,10 +19,7 @@ services:
       S3_BUCKET: vid2pod-media
       S3_PODCAST_BUCKET: vid2pod-podcasts
       S3_REGION: us-east-1
-      CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY}
-      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
-      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET}
-      VITE_CLERK_PUBLISHABLE_KEY: ${VITE_CLERK_PUBLISHABLE_KEY}
+      JWT_SECRET: ${JWT_SECRET}
       BASE_URL: https://vid2pod.g1tech.cloud
       NODE_ENV: production
       POLL_INTERVAL_MS: "60000"
@@ -66,7 +63,6 @@ services:
 
   minio-init:
     image: minio/mc
-    restart: "no"
     depends_on:
       minio:
         condition: service_healthy

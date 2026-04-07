@@ -6,7 +6,6 @@ import { resolve } from 'path';
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   root: resolve(__dirname),
-  envDir: resolve(__dirname, '../..'),
   build: {
     outDir: resolve(__dirname, '../../dist/web'),
     emptyOutDir: true,

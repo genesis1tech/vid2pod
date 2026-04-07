@@ -1,211 +1,35 @@
 import { FastifyInstance } from 'fastify';
-import { Webhook } from 'svix';
-import { provisionUser, getUser } from './service.js';
+import { register, login, getUser } from './service.js';
 import { authMiddleware } from './middleware.js';
-import { getConfig } from '../config.js';
-import { createChildLogger } from '../shared/logger.js';
+import { z } from 'zod';
 
-const log = createChildLogger('auth-routes');
+const registerSchema = z.object({
+  email: z.string().email(),
+  password: z.string().min(8),
+  displayName: z.string().optional(),
+});
 
-interface ClerkWebhookUserData {
-  id: string;
-  email_addresses: Array<{ email_address: string }>;
-  first_name: string | null;
-  last_name: string | null;
-}
+const loginSchema = z.object({
+  email: z.string().email(),
+  password: z.string(),
+});
 
 export async function authRoutes(app: FastifyInstance) {
-  // Clerk webhook — provisions local user + feed on signup
-  app.post('/api/v1/webhooks/clerk', {
-    config: { rawBody: true },
-  }, async (request, reply) => {
-    const config = getConfig();
-    const webhookSecret = config.CLERK_WEBHOOK_SECRET;
-
-    if (!webhookSecret) {
-      log.error('CLERK_WEBHOOK_SECRET not configured');
-      return reply.status(500).send({ error: 'Webhook not configured' });
-    }
-
-    const svixId = request.headers['svix-id'] as string;
-    const svixTimestamp = request.headers['svix-timestamp'] as string;
-    const svixSignature = request.headers['svix-signature'] as string;
-
-    if (!svixId || !svixTimestamp || !svixSignature) {
-      return reply.status(400).send({ error: 'Missing svix headers' });
-    }
-
-    const wh = new Webhook(webhookSecret);
-    let event: { type: string; data: ClerkWebhookUserData };
-
-    try {
-      const body = (request as any).rawBody || JSON.stringify(request.body);
-      event = wh.verify(body, {
-        'svix-id': svixId,
-        'svix-timestamp': svixTimestamp,
-        'svix-signature': svixSignature,
-      }) as typeof event;
-    } catch (err) {
-      log.warn({ err }, 'Clerk webhook verification failed');
-      return reply.status(400).send({ error: 'Invalid webhook signature' });
-    }
-
-    if (event.type === 'user.created') {
-      const data = event.data;
-      const email = data.email_addresses?.[0]?.email_address;
-      if (!email) {
-        log.warn({ clerkId: data.id }, 'Clerk user.created event has no email');
-        return reply.status(200).send({ ok: true, message: 'No email, skipped' });
-      }
-
-      const displayName = [data.first_name, data.last_name].filter(Boolean).join(' ') || null;
-      await provisionUser(data.id, email, displayName);
-
-      log.info({ clerkId: data.id, email }, 'User provisioned via webhook');
-    }
-
-    return reply.status(200).send({ ok: true });
+  app.post('/api/v1/auth/register', async (request, reply) => {
+    const body = registerSchema.parse(request.body);
+    const result = await register(body.email, body.password, body.displayName);
+    return reply.status(201).send(result);
   });
 
-  // Get current user profile
+  app.post('/api/v1/auth/login', async (request, reply) => {
+    const body = loginSchema.parse(request.body);
+    const result = await login(body.email, body.password);
+    return reply.status(200).send(result);
+  });
+
   app.get('/api/v1/auth/me', {
     preHandler: [authMiddleware],
   }, async (request) => {
     return getUser(request.userId!);
-  });
-
-  // API key management for the ViddyPod Agent
-  app.post('/api/v1/auth/api-keys', {
-    preHandler: [authMiddleware],
-  }, async (request, reply) => {
-    const { name } = (request.body as { name?: string }) || {};
-    const { getDb } = await import('../db/client.js');
-    const { apiKeys } = await import('../db/schema.js');
-    const { generateApiKey, hashApiKey } = await import('./api-keys.js');
-    const db = getDb();
-
-    const rawKey = generateApiKey();
-    const keyHash = hashApiKey(rawKey);
-    const keyPrefix = rawKey.slice(0, 12);
-
-    await db.insert(apiKeys).values({
-      userId: request.userId!,
-      name: name || 'ViddyPod Agent',
-      keyHash,
-      keyPrefix,
-    });
-
-    // Return the raw key ONLY this one time
-    return reply.send({ key: rawKey, prefix: keyPrefix });
-  });
-
-  app.get('/api/v1/auth/api-keys', {
-    preHandler: [authMiddleware],
-  }, async (request) => {
-    const { getDb } = await import('../db/client.js');
-    const { apiKeys } = await import('../db/schema.js');
-    const { eq, desc } = await import('drizzle-orm');
-    const db = getDb();
-
-    return db.select({
-      id: apiKeys.id,
-      name: apiKeys.name,
-      keyPrefix: apiKeys.keyPrefix,
-      lastUsedAt: apiKeys.lastUsedAt,
-      createdAt: apiKeys.createdAt,
-    }).from(apiKeys)
-      .where(eq(apiKeys.userId, request.userId!))
-      .orderBy(desc(apiKeys.createdAt));
-  });
-
-  app.delete('/api/v1/auth/api-keys/:id', {
-    preHandler: [authMiddleware],
-  }, async (request, reply) => {
-    const { id } = request.params as { id: string };
-    const { getDb } = await import('../db/client.js');
-    const { apiKeys } = await import('../db/schema.js');
-    const { eq, and } = await import('drizzle-orm');
-    const db = getDb();
-
-    await db.delete(apiKeys)
-      .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, request.userId!)));
-
-    return reply.send({ ok: true });
-  });
-
-  // Generate a long-lived agent token for the ViddyPod Agent
-  app.post('/api/v1/auth/agent-token', {
-    preHandler: [authMiddleware],
-  }, async (request) => {
-    const { getDb } = await import('../db/client.js');
-    const { users } = await import('../db/schema.js');
-    const { eq } = await import('drizzle-orm');
-    const db = getDb();
-
-    const userRows = await db.select({ id: users.id, email: users.email })
-      .from(users).where(eq(users.id, request.userId!)).limit(1);
-    if (userRows.length === 0) throw new Error('User not found');
-
-    const config = (await import('../config.js')).getConfig();
-
-    // Return connection info for the agent
-    return {
-      server: config.BASE_URL,
-      userId: userRows[0].id,
-      email: userRows[0].email,
-    };
-  });
-
-  // Save YouTube cookies for the current user
-  app.post('/api/v1/auth/youtube-cookies', {
-    preHandler: [authMiddleware],
-  }, async (request, reply) => {
-    const { cookies } = request.body as { cookies: string };
-    if (!cookies || typeof cookies !== 'string' || cookies.trim().length < 10) {
-      return reply.status(400).send({ error: 'Invalid cookies content' });
-    }
-
-    const { getDb } = await import('../db/client.js');
-    const { users } = await import('../db/schema.js');
-    const { eq } = await import('drizzle-orm');
-    const db = getDb();
-
-    await db.update(users)
-      .set({ youtubeCookies: cookies.trim(), updatedAt: new Date() })
-      .where(eq(users.id, request.userId!));
-
-    log.info({ userId: request.userId }, 'YouTube cookies saved');
-    return reply.send({ ok: true });
-  });
-
-  // Check if user has YouTube cookies configured
-  app.get('/api/v1/auth/youtube-cookies/status', {
-    preHandler: [authMiddleware],
-  }, async (request) => {
-    const { getDb } = await import('../db/client.js');
-    const { users } = await import('../db/schema.js');
-    const { eq } = await import('drizzle-orm');
-    const db = getDb();
-
-    const rows = await db.select({ youtubeCookies: users.youtubeCookies })
-      .from(users).where(eq(users.id, request.userId!)).limit(1);
-
-    return { connected: !!(rows[0]?.youtubeCookies) };
-  });
-
-  // Clear YouTube cookies
-  app.delete('/api/v1/auth/youtube-cookies', {
-    preHandler: [authMiddleware],
-  }, async (request, reply) => {
-    const { getDb } = await import('../db/client.js');
-    const { users } = await import('../db/schema.js');
-    const { eq } = await import('drizzle-orm');
-    const db = getDb();
-
-    await db.update(users)
-      .set({ youtubeCookies: null, updatedAt: new Date() })
-      .where(eq(users.id, request.userId!));
-
-    return reply.send({ ok: true });
   });
 }

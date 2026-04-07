@@ -3,20 +3,15 @@ import { uploadAsset, addStreamUrl, listAssets, getAsset, deleteAsset, fetchYouT
 import { addYouTubeVideo } from './youtube.js';
 import { authMiddleware } from '../auth/middleware.js';
 import { z } from 'zod';
-import { eq, and } from 'drizzle-orm';
-import { getDb } from '../db/client.js';
-import { assets, episodes, feeds } from '../db/schema.js';
-import { getConfig } from '../config.js';
-import { uploadFile, uploadToPodcastBucket } from '../publishing/storage.js';
-import { enqueueProcessingJob } from '../processing/jobs.js';
 import { ACCEPTED_AUDIO_TYPES, MAX_UPLOAD_SIZE } from '../shared/constants.js';
-import { ValidationError, NotFoundError } from '../shared/errors.js';
-import { createChildLogger } from '../shared/logger.js';
-
-const log = createChildLogger('ingestion-routes');
+import { ValidationError } from '../shared/errors.js';
 
 const addVideoSchema = z.object({
   url: z.string().url(),
+});
+
+const cookiesSchema = z.object({
+  cookies: z.string().min(1),
 });
 
 const addStreamSchema = z.object({
@@ -33,11 +28,13 @@ const youtubeMetaSchema = z.object({
 export async function ingestionRoutes(app: FastifyInstance) {
   // Agent endpoints — local agent polls for pending downloads and uploads results
 
-  // List videos waiting for agent download
+  // List videos waiting for local download
   app.get('/api/v1/agent/pending', {
     preHandler: [authMiddleware],
   }, async (request) => {
-    const db = getDb();
+    const db = (await import('../db/client.js')).getDb();
+    const { assets } = await import('../db/schema.js');
+    const { eq, and } = await import('drizzle-orm');
     return db.select().from(assets)
       .where(and(
         eq(assets.userId, request.userId!),
@@ -53,13 +50,15 @@ export async function ingestionRoutes(app: FastifyInstance) {
     const data = await request.file();
     if (!data) throw new ValidationError('No file provided');
 
-    const db = getDb();
+    const db = (await import('../db/client.js')).getDb();
+    const { assets } = await import('../db/schema.js');
+    const { eq, and } = await import('drizzle-orm');
 
     // Verify asset belongs to user and is pending download
     const rows = await db.select().from(assets)
       .where(and(eq(assets.id, assetId), eq(assets.userId, request.userId!)))
       .limit(1);
-    if (rows.length === 0) throw new NotFoundError('Asset');
+    if (rows.length === 0) throw new (await import('../shared/errors.js')).NotFoundError('Asset');
     const asset = rows[0];
     if (asset.processingStatus !== 'pending_download') {
       throw new ValidationError('Asset is not pending download');
@@ -78,6 +77,7 @@ export async function ingestionRoutes(app: FastifyInstance) {
     const thumbnail = getField('thumbnail');
 
     // Upload to storage
+    const { uploadFile } = await import('../publishing/storage.js');
     const storageKey = `assets/${request.userId}/${assetId}/${data.filename || 'audio.mp3'}`;
     await uploadFile(storageKey, buffer, data.mimetype);
 
@@ -94,7 +94,29 @@ export async function ingestionRoutes(app: FastifyInstance) {
       .where(eq(assets.id, assetId));
 
     // Update episode with metadata from YouTube
-    if (title || description || duration) {
+    const { episodes } = await import('../db/schema.js');
+    if (title || description || duration || thumbnail) {
+      // Download and re-host the thumbnail so podcast apps can access it
+      let hostedThumbnailUrl: string | undefined;
+      if (thumbnail) {
+        try {
+          const { uploadToPodcastBucket } = await import('../publishing/storage.js');
+          const config = (await import('../config.js')).getConfig();
+          const thumbRes = await fetch(thumbnail);
+          if (thumbRes.ok) {
+            const thumbBuffer = Buffer.from(await thumbRes.arrayBuffer());
+            const contentType = thumbRes.headers.get('content-type') || 'image/jpeg';
+            const ext = contentType.includes('png') ? 'png' : 'jpg';
+            const thumbKey = `thumbnails/${request.userId}/${assetId}.${ext}`;
+            await uploadToPodcastBucket(thumbKey, thumbBuffer, contentType);
+            hostedThumbnailUrl = `${config.BASE_URL}/storage/${thumbKey}`;
+          }
+        } catch {
+          // Fall back to original YouTube URL if download fails
+          hostedThumbnailUrl = thumbnail;
+        }
+      }
+
       const linkedEps = await db.select().from(episodes)
         .where(eq(episodes.assetId, assetId));
       for (const ep of linkedEps) {
@@ -102,13 +124,14 @@ export async function ingestionRoutes(app: FastifyInstance) {
           ...(title && { title }),
           ...(description && { description }),
           ...(duration && { durationSeconds: Math.round(parseFloat(duration)) }),
-          ...(thumbnail && { imageUrl: thumbnail }),
+          ...(hostedThumbnailUrl && { imageUrl: hostedThumbnailUrl }),
           updatedAt: new Date(),
         }).where(eq(episodes.id, ep.id));
       }
     }
 
     // Queue server-side processing (transcode + normalize)
+    const { enqueueProcessingJob } = await import('../processing/jobs.js');
     await enqueueProcessingJob({
       assetId,
       userId: request.userId!,
@@ -118,25 +141,62 @@ export async function ingestionRoutes(app: FastifyInstance) {
     return reply.status(200).send({ ok: true, status: 'processing' });
   });
 
+  // Re-host episode thumbnails from YouTube to our S3
+  app.post('/api/v1/episodes/:id/rehost-thumbnail', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const db = (await import('../db/client.js')).getDb();
+    const { episodes } = await import('../db/schema.js');
+    const { eq } = await import('drizzle-orm');
+
+    const rows = await db.select().from(episodes).where(eq(episodes.id, id)).limit(1);
+    if (rows.length === 0) throw new (await import('../shared/errors.js')).NotFoundError('Episode');
+    const ep = rows[0];
+
+    if (!ep.imageUrl || ep.imageUrl.includes('/storage/')) {
+      return reply.send({ ok: true, imageUrl: ep.imageUrl, message: 'Already hosted' });
+    }
+
+    const { uploadToPodcastBucket } = await import('../publishing/storage.js');
+    const config = (await import('../config.js')).getConfig();
+
+    const thumbRes = await fetch(ep.imageUrl);
+    if (!thumbRes.ok) throw new ValidationError('Failed to fetch thumbnail');
+    const thumbBuffer = Buffer.from(await thumbRes.arrayBuffer());
+    const contentType = thumbRes.headers.get('content-type') || 'image/jpeg';
+    const ext = contentType.includes('png') ? 'png' : 'jpg';
+    const thumbKey = `thumbnails/${request.userId}/${id}.${ext}`;
+    await uploadToPodcastBucket(thumbKey, thumbBuffer, contentType);
+    const hostedUrl = `${config.BASE_URL}/storage/${thumbKey}`;
+
+    await db.update(episodes)
+      .set({ imageUrl: hostedUrl, updatedAt: new Date() })
+      .where(eq(episodes.id, id));
+
+    return reply.send({ ok: true, imageUrl: hostedUrl });
+  });
+
   // Upload/regenerate podcast cover image
   app.post('/api/v1/feeds/:feedId/cover', {
     preHandler: [authMiddleware],
   }, async (request, reply) => {
     const { feedId } = request.params as { feedId: string };
-    const db = getDb();
-    const config = getConfig();
+    const db = (await import('../db/client.js')).getDb();
+    const { feeds } = await import('../db/schema.js');
+    const { eq, and } = await import('drizzle-orm');
 
     const feedRows = await db.select().from(feeds)
       .where(and(eq(feeds.id, feedId), eq(feeds.userId, request.userId!)))
       .limit(1);
-    if (feedRows.length === 0) throw new NotFoundError('Feed');
+    if (feedRows.length === 0) throw new (await import('../shared/errors.js')).NotFoundError('Feed');
+    const feed = feedRows[0];
 
-    const { readFile } = await import('fs/promises');
-    const { resolve, dirname } = await import('path');
-    const { fileURLToPath } = await import('url');
-    const __dirname = dirname(fileURLToPath(import.meta.url));
-    const coverBuffer = await readFile(resolve(__dirname, '../../static/viddypod-cover.png'));
+    const { generateCoverImage } = await import('../rss/cover-generator.js');
+    const { uploadToPodcastBucket } = await import('../publishing/storage.js');
+    const config = (await import('../config.js')).getConfig();
 
+    const coverBuffer = await generateCoverImage(feed.title);
     const coverKey = `covers/${request.userId}/${feedId}.png`;
     await uploadToPodcastBucket(coverKey, coverBuffer, 'image/png');
     const imageUrl = `${config.BASE_URL}/storage/${coverKey}`;
@@ -146,6 +206,18 @@ export async function ingestionRoutes(app: FastifyInstance) {
       .where(eq(feeds.id, feedId));
 
     return reply.status(200).send({ ok: true, imageUrl });
+  });
+
+  // Upload YouTube cookies for authenticated downloads
+  app.post('/api/v1/youtube/cookies', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const body = cookiesSchema.parse(request.body);
+    const { writeFile } = await import('fs/promises');
+    const { join } = await import('path');
+    const cookiesPath = join(process.cwd(), 'cookies.txt');
+    await writeFile(cookiesPath, body.cookies, 'utf-8');
+    return reply.status(200).send({ ok: true, message: 'YouTube cookies saved' });
   });
 
   // Primary endpoint: add a YouTube video to personal library

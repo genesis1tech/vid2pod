@@ -28,6 +28,40 @@ async function api(path: string, options?: RequestInit): Promise<any> {
   return res.json();
 }
 
+program
+  .command('auth:login')
+  .description('Login and save credentials')
+  .requiredOption('--email <email>', 'Email')
+  .requiredOption('--password <password>', 'Password')
+  .option('--api-url <url>', 'API base URL', 'http://localhost:3000')
+  .action(async (opts) => {
+    API_BASE = opts.apiUrl;
+    const res = await api('/api/v1/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email: opts.email, password: opts.password }),
+    });
+    AUTH_TOKEN = res.accessToken;
+    console.log(`Logged in as ${res.user.email}`);
+    console.log(`Token: ${res.accessToken}`);
+  });
+
+program
+  .command('auth:register')
+  .description('Register a new account')
+  .requiredOption('--email <email>', 'Email')
+  .requiredOption('--password <password>', 'Password')
+  .option('--name <name>', 'Display name')
+  .option('--api-url <url>', 'API base URL', 'http://localhost:3000')
+  .action(async (opts) => {
+    API_BASE = opts.apiUrl;
+    const res = await api('/api/v1/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email: opts.email, password: opts.password, displayName: opts.name }),
+    });
+    console.log(`Registered as ${res.user.email}`);
+    console.log(`Token: ${res.accessToken}`);
+  });
+
 const licensesCmd = program.command('licenses').description('Manage licenses');
 
 licensesCmd

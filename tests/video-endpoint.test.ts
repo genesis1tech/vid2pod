@@ -48,7 +48,7 @@ let stopScheduler: () => void;
 let token: string;
 
 beforeAll(async () => {
-  token = createTestToken('test-user-id', 'editor');
+  token = await createTestToken('test-user-id', 'editor');
   const server = await createServer();
   app = server.app;
   stopScheduler = server.stopScheduler;

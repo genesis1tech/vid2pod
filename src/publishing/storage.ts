@@ -1,6 +1,6 @@
 import {
   S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand,
-  HeadObjectCommand, CopyObjectCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { Upload } from '@aws-sdk/lib-storage';
@@ -137,25 +137,6 @@ export async function deletePodcastFile(key: string): Promise<void> {
     Key: key,
   }));
   log.info({ key, bucket: config.S3_PODCAST_BUCKET }, 'File deleted from podcast bucket');
-}
-
-export async function movePodcastFile(sourceKey: string, destKey: string): Promise<void> {
-  const config = getConfig();
-  const client = getS3Client();
-  const bucket = config.S3_PODCAST_BUCKET;
-
-  await client.send(new CopyObjectCommand({
-    Bucket: bucket,
-    CopySource: `${bucket}/${sourceKey}`,
-    Key: destKey,
-  }));
-
-  await client.send(new DeleteObjectCommand({
-    Bucket: bucket,
-    Key: sourceKey,
-  }));
-
-  log.info({ sourceKey, destKey, bucket }, 'File moved in podcast bucket');
 }
 
 export async function getPodcastFileInfo(key: string) {

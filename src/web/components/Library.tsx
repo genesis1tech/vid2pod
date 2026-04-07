@@ -1,37 +1,34 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, apiFetch } from '../hooks/useAuth.js';
 import { AddVideo } from './AddVideo.js';
 import { EpisodeList } from './EpisodeList.js';
-import { ApiKeys } from './ApiKeys.js';
 import QRCode from 'qrcode';
 
 export function Library() {
-  const { user, getToken, logout } = useAuth();
+  const { user, token, feedUrl, logout } = useAuth();
   const [episodes, setEpisodes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [feedUrl, setFeedUrl] = useState<string | null>(null);
   const [feedCopied, setFeedCopied] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [qrFeedUrl, setQrFeedUrl] = useState<string | null>(null);
 
   const refreshEpisodes = useCallback(async () => {
+    if (!token) return;
     try {
-      const token = await getToken();
       const feeds = await apiFetch<any[]>('/api/v1/feeds', token);
       if (feeds.length > 0) {
-        const url = `${window.location.origin}/feed/${feeds[0].ownershipToken}.xml`;
-        setFeedUrl(url);
         const eps = await apiFetch<any[]>(`/api/v1/feeds/${feeds[0].id}/episodes`, token);
         setEpisodes(eps);
       }
     } finally {
       setLoading(false);
     }
-  }, [getToken]);
+  }, [token]);
 
   useEffect(() => {
     refreshEpisodes();
+    // Poll every 10s to pick up newly processed episodes
     const interval = setInterval(refreshEpisodes, 10_000);
     return () => clearInterval(interval);
   }, [refreshEpisodes]);
@@ -45,6 +42,7 @@ export function Library() {
 
   const toggleQr = async () => {
     if (!feedUrl) return;
+    // Regenerate if feed URL changed
     if (!qrDataUrl || qrFeedUrl !== feedUrl) {
       const token = feedUrl.split('/feed/')[1]?.replace('.xml', '') || '';
       const apiBase = feedUrl.split('/feed/')[0];
@@ -62,9 +60,10 @@ export function Library() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      {/* Header */}
       <header className="border-b border-(--color-border) px-4 py-3 sm:px-6">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
-          <h1 className="text-lg sm:text-xl font-bold text-(--color-primary)">ViddyPod</h1>
+          <h1 className="text-lg sm:text-xl font-bold text-(--color-primary)">Vid2Pod</h1>
           <div className="flex items-center gap-3">
             <span className="text-sm text-(--color-text-muted) hidden sm:inline">{user?.email}</span>
             <button onClick={logout} className="text-sm text-(--color-danger)">Sign out</button>
@@ -72,8 +71,11 @@ export function Library() {
         </div>
       </header>
 
+      {/* Main content */}
       <main className="flex-1 px-4 py-6 sm:px-6">
         <div className="max-w-3xl mx-auto space-y-6">
+
+          {/* Feed URL banner */}
           {feedUrl && (
             <div className="card">
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
@@ -101,9 +103,11 @@ export function Library() {
             </div>
           )}
 
-          <ApiKeys />
+          {/* Add video */}
           <AddVideo onAdded={refreshEpisodes} />
-          <EpisodeList episodes={episodes} loading={loading} onRefresh={refreshEpisodes} />
+
+          {/* Episode list */}
+          <EpisodeList episodes={episodes} loading={loading} />
         </div>
       </main>
     </div>

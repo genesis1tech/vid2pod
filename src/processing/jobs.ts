@@ -2,7 +2,7 @@ import { Queue, Worker } from 'bullmq';
 import { getConfig } from '../config.js';
 import { getDb } from '../db/client.js';
 import { assets, processingJobs, episodes, feeds } from '../db/schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { extractMetadata } from './metadata-extractor.js';
 import { transcode } from './transcoder.js';
 import { normalize } from './normalizer.js';
@@ -10,7 +10,7 @@ import { uploadFile, uploadToPodcastBucket, getSignedDownloadUrl } from '../publ
 import { validateLicense } from '../licensing/service.js';
 import { createChildLogger } from '../shared/logger.js';
 import { NotFoundError } from '../shared/errors.js';
-import { writeFile, readFile, mkdir, rm } from 'fs/promises';
+import { writeFile, readFile, unlink, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { v4 as uuid } from 'uuid';
@@ -32,14 +32,13 @@ export interface ProcessingJobData {
   targetFormat?: 'mp3' | 'm4a';
 }
 
-export async function enqueueProcessingJob(data: ProcessingJobData, options?: { delay?: number }) {
+export async function enqueueProcessingJob(data: ProcessingJobData) {
   const queue = getProcessingQueue();
   const job = await queue.add('process-asset', data, {
     attempts: 3,
     backoff: { type: 'exponential', delay: 5000 },
-    ...(options?.delay && { delay: options.delay }),
   });
-  log.info({ jobId: job.id, assetId: data.assetId, delay: options?.delay }, 'Processing job enqueued');
+  log.info({ jobId: job.id, assetId: data.assetId }, 'Processing job enqueued');
   return job;
 }
 
@@ -134,13 +133,10 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
       })
       .where(eq(assets.id, asset.id));
 
-    // Auto-publish: update linked draft episodes with enclosure info and publish
+    // Auto-publish: update linked episodes with enclosure info and publish
     const enclosureUrl = `${config.BASE_URL}/storage/${outputKey}`;
     const linkedEpisodes = await db.select().from(episodes)
-      .where(and(
-        eq(episodes.assetId, asset.id),
-        eq(episodes.status, 'draft'),
-      ));
+      .where(eq(episodes.assetId, asset.id));
 
     for (const ep of linkedEpisodes) {
       await db.update(episodes)

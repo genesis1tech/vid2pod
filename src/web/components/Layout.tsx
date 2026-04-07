@@ -17,7 +17,7 @@ export function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen flex">
       <nav className="w-56 border-r border-[var(--color-border)] p-4 flex flex-col">
-        <h1 className="text-xl font-bold mb-6 text-[var(--color-primary)]">ViddyPod</h1>
+        <h1 className="text-xl font-bold mb-6 text-[var(--color-primary)]">Vid2Pod</h1>
         {nav.map((n) => (
           <button
             key={n.id}

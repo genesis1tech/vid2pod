@@ -2,7 +2,6 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyStatic from '@fastify/static';
-import { clerkPlugin } from '@clerk/fastify';
 import { ZodError } from 'zod';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -28,34 +27,6 @@ export async function createServer() {
 
   await app.register(cors, { origin: true });
   await app.register(multipart, { limits: { fileSize: 500 * 1024 * 1024 } });
-
-  // Clerk JWT verification plugin — only on API routes.
-  // Feed, storage, subscribe, health, and static file routes must be publicly accessible.
-  if (config.NODE_ENV !== 'test') {
-    await app.register(clerkPlugin, { hookName: 'preHandler' });
-    // Skip Clerk auth for public routes
-    app.addHook('preHandler', (request, reply, done) => {
-      const publicPrefixes = ['/feed/', '/storage/', '/subscribe/', '/health', '/api/v1/webhooks/'];
-      const isPublic = publicPrefixes.some(p => request.url.startsWith(p))
-        || request.url === '/'
-        || request.url.startsWith('/assets/');
-      if (isPublic) {
-        // Clear Clerk auth state so it doesn't interfere
-        (request as any).auth = undefined;
-      }
-      done();
-    });
-  }
-
-  // Raw body support for webhook signature verification
-  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
-    try {
-      (req as any).rawBody = body;
-      done(null, JSON.parse(body as string));
-    } catch (err) {
-      done(err as Error, undefined);
-    }
-  });
 
   app.addHook('onRequest', (request, reply, done) => {
     log.info({ method: request.method, url: request.url }, 'Incoming request');

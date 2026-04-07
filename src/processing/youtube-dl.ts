@@ -35,7 +35,7 @@ export function extractVideoId(url: string): string | null {
   return null;
 }
 
-export async function downloadAudio(videoId: string, cookiesContent?: string | null): Promise<YtDlpResult> {
+export async function downloadAudio(videoId: string): Promise<YtDlpResult> {
   const workDir = join(tmpdir(), `vid2pod-yt-${uuid()}`);
   await mkdir(workDir, { recursive: true });
 
@@ -53,19 +53,19 @@ export async function downloadAudio(videoId: string, cookiesContent?: string | n
     '--write-info-json',
     '--no-playlist',
     '--no-overwrites',
-    '--max-filesize', '500m',
     '--js-runtimes', 'node',
     '--remote-components', 'ejs:github',
   ];
 
-  // Write per-user cookies to a temp file if provided
-  let userCookiesPath: string | null = null;
-  if (cookiesContent) {
-    const { writeFile } = await import('fs/promises');
-    userCookiesPath = join(workDir, 'cookies.txt');
-    await writeFile(userCookiesPath, cookiesContent, { encoding: 'utf-8', mode: 0o600 });
-    args.push('--cookies', userCookiesPath);
-    log.info('Using per-user cookies for YouTube authentication');
+  // Use cookies file if available (for authenticated downloads)
+  const cookiesPath = join(process.cwd(), 'cookies.txt');
+  try {
+    const { access } = await import('fs/promises');
+    await access(cookiesPath);
+    args.push('--cookies', cookiesPath);
+    log.info('Using cookies.txt for YouTube authentication');
+  } catch {
+    // No cookies file, proceed without
   }
 
   args.push(`https://www.youtube.com/watch?v=${videoId}`);
