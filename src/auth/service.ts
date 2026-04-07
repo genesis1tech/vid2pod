@@ -40,7 +40,7 @@ export async function register(email: string, password: string, displayName?: st
   const feedName = displayName || email.split('@')[0];
 
   const firstName = feedName.split(/\s+/)[0];
-  const feedTitle = `${firstName}'s ViddyPod`;
+  const feedTitle = `${firstName}'s ViddyPod Library`;
 
   // Use the static ViddyPod cover image
   const __dirname = dirname(fileURLToPath(import.meta.url));
