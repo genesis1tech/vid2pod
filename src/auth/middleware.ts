@@ -15,9 +15,10 @@ declare module 'fastify' {
 }
 
 export async function authMiddleware(request: FastifyRequest, reply: FastifyReply) {
+  const authHeader = request.headers.authorization;
+
   // Test mode bypass: tokens in format "test_{userId}_{role}"
   if (process.env.NODE_ENV === 'test') {
-    const authHeader = request.headers.authorization;
     if (authHeader?.startsWith('Bearer test_')) {
       const parts = authHeader.slice(7).split('_');
       request.userId = parts.slice(1, -1).join('_');
@@ -26,6 +27,35 @@ export async function authMiddleware(request: FastifyRequest, reply: FastifyRepl
       return;
     }
     throw new UnauthorizedError('Not authenticated');
+  }
+
+  // API key authentication (for ViddyPod Agent)
+  if (authHeader?.startsWith('Bearer v2p_')) {
+    const rawKey = authHeader.slice(7);
+    const { hashApiKey } = await import('./api-keys.js');
+    const { getDb } = await import('../db/client.js');
+    const { apiKeys, users } = await import('../db/schema.js');
+    const { eq } = await import('drizzle-orm');
+    const db = getDb();
+
+    const keyHash = hashApiKey(rawKey);
+    const keyRows = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, keyHash)).limit(1);
+    if (keyRows.length === 0) {
+      throw new UnauthorizedError('Invalid API key');
+    }
+
+    const userRows = await db.select().from(users).where(eq(users.id, keyRows[0].userId)).limit(1);
+    if (userRows.length === 0) {
+      throw new UnauthorizedError('User not found for API key');
+    }
+
+    // Update last used timestamp (fire and forget)
+    db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, keyRows[0].id)).catch(() => {});
+
+    request.userId = userRows[0].id;
+    request.userEmail = userRows[0].email;
+    request.userRole = userRows[0].role;
+    return;
   }
 
   const auth = getAuth(request);

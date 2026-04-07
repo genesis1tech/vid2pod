@@ -10,6 +10,17 @@ await c.connect();
 await c.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS clerk_id TEXT');
 await c.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS youtube_cookies TEXT');
 await c.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS agent_last_seen TIMESTAMPTZ');
+await c.query(\`
+  CREATE TABLE IF NOT EXISTS api_keys (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    key_hash TEXT NOT NULL UNIQUE,
+    key_prefix TEXT NOT NULL,
+    last_used_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )
+\`);
 await c.query('ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL');
 await c.query(\`
   DO \\\$\\\$ BEGIN

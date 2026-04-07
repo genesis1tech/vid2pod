@@ -74,6 +74,65 @@ export async function authRoutes(app: FastifyInstance) {
     return getUser(request.userId!);
   });
 
+  // API key management for the ViddyPod Agent
+  app.post('/api/v1/auth/api-keys', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const { name } = (request.body as { name?: string }) || {};
+    const { getDb } = await import('../db/client.js');
+    const { apiKeys } = await import('../db/schema.js');
+    const { generateApiKey, hashApiKey } = await import('./api-keys.js');
+    const db = getDb();
+
+    const rawKey = generateApiKey();
+    const keyHash = hashApiKey(rawKey);
+    const keyPrefix = rawKey.slice(0, 12);
+
+    await db.insert(apiKeys).values({
+      userId: request.userId!,
+      name: name || 'ViddyPod Agent',
+      keyHash,
+      keyPrefix,
+    });
+
+    // Return the raw key ONLY this one time
+    return reply.send({ key: rawKey, prefix: keyPrefix });
+  });
+
+  app.get('/api/v1/auth/api-keys', {
+    preHandler: [authMiddleware],
+  }, async (request) => {
+    const { getDb } = await import('../db/client.js');
+    const { apiKeys } = await import('../db/schema.js');
+    const { eq, desc } = await import('drizzle-orm');
+    const db = getDb();
+
+    return db.select({
+      id: apiKeys.id,
+      name: apiKeys.name,
+      keyPrefix: apiKeys.keyPrefix,
+      lastUsedAt: apiKeys.lastUsedAt,
+      createdAt: apiKeys.createdAt,
+    }).from(apiKeys)
+      .where(eq(apiKeys.userId, request.userId!))
+      .orderBy(desc(apiKeys.createdAt));
+  });
+
+  app.delete('/api/v1/auth/api-keys/:id', {
+    preHandler: [authMiddleware],
+  }, async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const { getDb } = await import('../db/client.js');
+    const { apiKeys } = await import('../db/schema.js');
+    const { eq, and } = await import('drizzle-orm');
+    const db = getDb();
+
+    await db.delete(apiKeys)
+      .where(and(eq(apiKeys.id, id), eq(apiKeys.userId, request.userId!)));
+
+    return reply.send({ ok: true });
+  });
+
   // Generate a long-lived agent token for the ViddyPod Agent
   app.post('/api/v1/auth/agent-token', {
     preHandler: [authMiddleware],
