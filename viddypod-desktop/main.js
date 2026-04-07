@@ -54,9 +54,9 @@ function formatTime(iso) {
 }
 
 signinBtn.addEventListener('click', async () => {
-  // Open the OAuth callback URL in the user's browser.
+  // Open the agent-connect page in the user's browser.
   // The web app will require login, then redirect to viddypod://callback?token=...
-  await open(`${SERVER}/api/v1/auth/agent-callback?redirect=viddypod://callback`);
+  await open(`${SERVER}/agent-connect`);
 });
 
 signoutBtn.addEventListener('click', async () => {

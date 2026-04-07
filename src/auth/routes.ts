@@ -36,18 +36,11 @@ export async function authRoutes(app: FastifyInstance) {
     return getUser(request.userId!);
   });
 
-  // Agent OAuth callback — generates a token and redirects back to viddypod://callback
-  // The user must already be logged in via the web UI (cookie-based session via JWT in querystring or auth header).
-  // For desktop agent: agent opens this URL in browser, user logs in if needed, server issues token and redirects.
-  app.get('/api/v1/auth/agent-callback', {
+  // Generate an agent token. Called by the browser-based connect page
+  // (which uses the user's existing JWT session) — NOT a direct browser GET.
+  app.post('/api/v1/auth/agent-token', {
     preHandler: [authMiddleware],
   }, async (request, reply) => {
-    const { redirect } = request.query as { redirect?: string };
-    if (!redirect || !redirect.startsWith('viddypod://')) {
-      return reply.status(400).send({ error: 'Invalid redirect scheme' });
-    }
-
-    // Generate a long-lived token for the agent
     const rawToken = generateApiKey();
     const tokenHash = hashApiKey(rawToken);
     const tokenPrefix = rawToken.slice(0, 12);
@@ -60,8 +53,6 @@ export async function authRoutes(app: FastifyInstance) {
       tokenPrefix,
     });
 
-    // Redirect to the desktop app's deep-link handler with the token
-    const callbackUrl = `${redirect}?token=${encodeURIComponent(rawToken)}`;
-    return reply.redirect(callbackUrl);
+    return reply.send({ token: rawToken });
   });
 }
