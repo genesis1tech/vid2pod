@@ -57,6 +57,8 @@ pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadR
             "--write-info-json",
             "--no-playlist",
             "--no-overwrites",
+            "--js-runtimes", "node",
+            "--remote-components", "ejs:github",
             "--cookies-from-browser", browser,
             &url,
         ])
