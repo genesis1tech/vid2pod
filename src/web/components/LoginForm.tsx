@@ -59,9 +59,11 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
           {isRegister && (
             <input
               type="text"
-              placeholder="Display name (optional)"
+              placeholder="Your name (e.g. Marcus)"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
+              required
+              minLength={1}
             />
           )}
           <button type="submit" className="btn btn-primary w-full" disabled={submitting}>

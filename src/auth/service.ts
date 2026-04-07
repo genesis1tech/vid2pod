@@ -15,9 +15,13 @@ import { fileURLToPath } from 'url';
 
 const log = createChildLogger('auth-service');
 
-export async function register(email: string, password: string, displayName?: string) {
+export async function register(email: string, password: string, displayName: string) {
   const db = getDb();
   const config = getConfig();
+
+  if (!displayName || !displayName.trim()) {
+    throw new AppError('Display name is required', 400, 'DISPLAY_NAME_REQUIRED');
+  }
 
   const existing = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (existing.length > 0) {
@@ -31,21 +35,39 @@ export async function register(email: string, password: string, displayName?: st
     id,
     email,
     passwordHash,
-    displayName: displayName || null,
+    displayName,
     role: 'editor',
   });
 
   const ownershipToken = nanoid();
   const feedId = uuid();
-  const feedName = displayName || email.split('@')[0];
+  const feedName = displayName;
 
   const firstName = feedName.split(/\s+/)[0];
   const feedTitle = `${firstName}'s ViddyPod Library`;
 
-  // Use the static ViddyPod cover image
+  // Use the static ViddyPod cover image. Try multiple paths in case
+  // of dev vs production layout differences.
+  let coverBuffer: Buffer | null = null;
   const __dirname = dirname(fileURLToPath(import.meta.url));
-  const coverPath = resolve(__dirname, '../../static/viddypod-cover.png');
-  const coverBuffer = await readFile(coverPath);
+  const candidatePaths = [
+    resolve(__dirname, '../../static/viddypod-cover.png'),  // dist/auth → /app/static
+    resolve(__dirname, '../../../static/viddypod-cover.png'), // src/auth → /app/static
+    resolve(process.cwd(), 'static/viddypod-cover.png'),
+  ];
+  for (const p of candidatePaths) {
+    try {
+      coverBuffer = await readFile(p);
+      log.info({ coverPath: p }, 'Loaded ViddyPod cover');
+      break;
+    } catch {
+      // try next path
+    }
+  }
+  if (!coverBuffer) {
+    log.error({ candidatePaths }, 'Could not find viddypod-cover.png in any location');
+    throw new AppError('Cover image not found on server', 500, 'COVER_NOT_FOUND');
+  }
   const coverKey = `covers/${id}/cover.png`;
   await uploadToPodcastBucket(coverKey, coverBuffer, 'image/png');
   const imageUrl = `${config.BASE_URL}/storage/${coverKey}`;

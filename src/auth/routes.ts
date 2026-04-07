@@ -10,7 +10,7 @@ import { z } from 'zod';
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
-  displayName: z.string().optional(),
+  displayName: z.string().min(1, 'Display name is required'),
 });
 
 const loginSchema = z.object({
@@ -20,9 +20,18 @@ const loginSchema = z.object({
 
 export async function authRoutes(app: FastifyInstance) {
   app.post('/api/v1/auth/register', async (request, reply) => {
-    const body = registerSchema.parse(request.body);
-    const result = await register(body.email, body.password, body.displayName);
-    return reply.status(201).send(result);
+    try {
+      const body = registerSchema.parse(request.body);
+      const result = await register(body.email, body.password, body.displayName);
+      return reply.status(201).send(result);
+    } catch (err: any) {
+      if (err.statusCode) throw err; // AppError, let global handler do its job
+      request.log.error({ err: err.message, stack: err.stack }, 'register failed');
+      return reply.status(500).send({
+        error: 'INTERNAL_ERROR',
+        message: err.message || 'Registration failed',
+      });
+    }
   });
 
   app.post('/api/v1/auth/login', async (request, reply) => {
