@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, apiFetch } from '../hooks/useAuth.js';
 import { AddVideo } from './AddVideo.js';
 import { EpisodeList } from './EpisodeList.js';
+import { DownloadAgent } from './DownloadAgent.js';
 import QRCode from 'qrcode';
 
 export function Library() {
@@ -104,6 +105,7 @@ export function Library() {
           )}
 
           {/* Add video */}
+          <DownloadAgent />
           <AddVideo onAdded={refreshEpisodes} />
 
           {/* Episode list */}

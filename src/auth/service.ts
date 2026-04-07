@@ -117,6 +117,7 @@ export async function getUser(userId: string) {
     email: users.email,
     displayName: users.displayName,
     role: users.role,
+    agentLastSeen: users.agentLastSeen,
   }).from(users).where(eq(users.id, userId)).limit(1);
 
   if (rows.length === 0) throw new NotFoundError('User');
