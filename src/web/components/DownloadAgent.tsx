@@ -85,6 +85,26 @@ export function DownloadAgent() {
       >
         Download for {os.label}
       </a>
+      {os.key === 'windows' && (
+        <div className="mt-3 text-xs text-(--color-text-muted) space-y-1">
+          <p className="font-medium text-(--color-text-muted)">Windows install notes:</p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>If SmartScreen blocks the installer, click <strong>More info → Run anyway</strong> (normal for unsigned apps)</li>
+            <li>ViddyPod will appear in your system tray (bottom-right corner)</li>
+            <li>Chrome must be fully closed when the agent downloads a video (Chrome locks its cookie database)</li>
+          </ul>
+        </div>
+      )}
+      {os.key.startsWith('macos') && (
+        <div className="mt-3 text-xs text-(--color-text-muted) space-y-1">
+          <p className="font-medium text-(--color-text-muted)">macOS install notes:</p>
+          <ul className="list-disc pl-4 space-y-0.5">
+            <li>First run: right-click ViddyPod.app → <strong>Open</strong> (Gatekeeper warning is normal)</li>
+            <li>ViddyPod will appear in your menu bar (top-right)</li>
+            <li>Requires Node.js installed (usually via Homebrew: <code>brew install node</code>)</li>
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

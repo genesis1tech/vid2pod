@@ -61,6 +61,22 @@ jobs:
             chmod +x "${{ matrix.ytdlp_dest }}"
           fi
 
+      - name: Download Node.js portable (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          $nodeVersion = "v22.11.0"
+          $nodeZipName = "node-$nodeVersion-win-x64"
+          $nodeUrl = "https://nodejs.org/dist/$nodeVersion/$nodeZipName.zip"
+          New-Item -ItemType Directory -Force -Path "viddypod-desktop/src-tauri/binaries/node-windows"
+          Invoke-WebRequest -Uri $nodeUrl -OutFile "node.zip"
+          Expand-Archive -Path "node.zip" -DestinationPath "node-extracted"
+          Copy-Item "node-extracted/$nodeZipName/node.exe" "viddypod-desktop/src-tauri/binaries/node-windows/node.exe"
+          Remove-Item "node.zip"
+          Remove-Item -Recurse "node-extracted"
+          Write-Host "Bundled node.exe:"
+          Get-Item "viddypod-desktop/src-tauri/binaries/node-windows/node.exe" | Format-List Name,Length
+
       - name: Install npm dependencies
         working-directory: viddypod-desktop
         run: npm install

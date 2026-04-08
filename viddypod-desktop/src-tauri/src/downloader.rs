@@ -33,7 +33,88 @@ fn detect_browser() -> &'static str {
         }
         return "chrome";
     }
+    if cfg!(target_os = "windows") {
+        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+        let program_files = std::env::var("PROGRAMFILES").unwrap_or_default();
+        if !local_app_data.is_empty() {
+            if std::path::Path::new(&format!("{}\\Google\\Chrome\\User Data", local_app_data)).exists() {
+                return "chrome";
+            }
+            if std::path::Path::new(&format!("{}\\BraveSoftware\\Brave-Browser\\User Data", local_app_data)).exists() {
+                return "brave";
+            }
+            if std::path::Path::new(&format!("{}\\Microsoft\\Edge\\User Data", local_app_data)).exists() {
+                return "edge";
+            }
+        }
+        if !program_files.is_empty()
+            && std::path::Path::new(&format!("{}\\Google\\Chrome\\Application\\chrome.exe", program_files)).exists()
+        {
+            return "chrome";
+        }
+        return "chrome";
+    }
     "chrome"
+}
+
+/// On Windows, locate the bundled node.exe inside the app's resource directory.
+/// Returns the directory containing node.exe so it can be added to PATH.
+#[cfg(target_os = "windows")]
+fn get_bundled_node_dir(app: &AppHandle) -> Option<String> {
+    use tauri::Manager;
+    app.path()
+        .resolve("node.exe", tauri::path::BaseDirectory::Resource)
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.to_string_lossy().to_string()))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_bundled_node_dir(_: &AppHandle) -> Option<String> {
+    None
+}
+
+/// Build a PATH env value with platform-appropriate locations prepended.
+fn build_enriched_path(app: &AppHandle) -> String {
+    let mut components: Vec<String> = Vec::new();
+
+    // Bundled node.exe directory (Windows only)
+    if let Some(p) = get_bundled_node_dir(app) {
+        components.push(p);
+    }
+
+    // Common Unix locations for node (macOS Homebrew + system)
+    if cfg!(unix) {
+        components.push("/opt/homebrew/bin".to_string());
+        components.push("/usr/local/bin".to_string());
+        components.push("/usr/bin".to_string());
+        components.push("/bin".to_string());
+    }
+
+    // Existing PATH at the end
+    if let Ok(p) = std::env::var("PATH") {
+        components.push(p);
+    }
+
+    let separator = if cfg!(windows) { ";" } else { ":" };
+    components.join(separator)
+}
+
+/// Translate yt-dlp's cryptic Chrome-locked stderr into a friendlier message.
+fn humanize_yt_dlp_error(stderr: &str) -> String {
+    let lower = stderr.to_lowercase();
+    if lower.contains("could not copy chrome cookie")
+        || lower.contains("appbound")
+        || (lower.contains("permission denied") && lower.contains("chrome"))
+    {
+        return "Chrome must be fully closed for cookie extraction on Windows. Please quit Chrome (including any background processes from the system tray) and try again.".to_string();
+    }
+    if lower.contains("sign in to confirm you're not a bot") {
+        return "YouTube blocked the request. Make sure you're signed into YouTube in your browser, then retry.".to_string();
+    }
+    if lower.contains("n challenge solving failed") || lower.contains("requested format is not available") {
+        return "YouTube's JavaScript challenge could not be solved. Make sure node is installed and accessible.".to_string();
+    }
+    format!("yt-dlp failed: {}", stderr.trim())
 }
 
 pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadResult> {
@@ -46,16 +127,8 @@ pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadR
 
     log::info!("Downloading {} via {}", video_id, browser);
 
-    // Build an enriched PATH so yt-dlp can find `node` in non-system locations.
-    // GUI apps on macOS launched from Finder don't inherit the user's shell PATH,
-    // so /opt/homebrew/bin and /usr/local/bin are missing by default.
-    let current_path = std::env::var("PATH").unwrap_or_default();
-    let extra_paths = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin";
-    let enriched_path = if current_path.is_empty() {
-        extra_paths.to_string()
-    } else {
-        format!("{}:{}", extra_paths, current_path)
-    };
+    let enriched_path = build_enriched_path(app);
+    log::debug!("yt-dlp PATH: {}", enriched_path);
 
     let shell = app.shell();
     let (mut rx, _child) = shell
@@ -90,7 +163,7 @@ pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadR
             }
             CommandEvent::Terminated(payload) => {
                 if payload.code.unwrap_or(-1) != 0 {
-                    return Err(anyhow!("yt-dlp failed: {}", stderr_buf));
+                    return Err(anyhow!("{}", humanize_yt_dlp_error(&stderr_buf)));
                 }
                 break;
             }
