@@ -17,6 +17,11 @@
           "name": "yt-dlp",
           "sidecar": true,
           "args": true
+        },
+        {
+          "name": "node",
+          "sidecar": true,
+          "args": true
         }
       ]
     },

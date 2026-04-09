@@ -67,9 +67,9 @@ jobs:
         run: |
           curl -L -o node.zip "https://nodejs.org/dist/v22.11.0/node-v22.11.0-win-x64.zip"
           unzip -o node.zip "node-v22.11.0-win-x64/node.exe" -d node-extracted
-          cp node-extracted/node-v22.11.0-win-x64/node.exe viddypod-desktop/src-tauri/binaries/node.exe
+          cp node-extracted/node-v22.11.0-win-x64/node.exe viddypod-desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe
           rm -rf node.zip node-extracted
-          ls -la viddypod-desktop/src-tauri/binaries/node.exe
+          ls -la viddypod-desktop/src-tauri/binaries/node-x86_64-pc-windows-msvc.exe
 
       - name: Install npm dependencies
         working-directory: viddypod-desktop

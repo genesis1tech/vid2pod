@@ -57,16 +57,23 @@ fn detect_browser() -> &'static str {
     "chrome"
 }
 
-/// On Windows, locate the bundled node.exe inside the app's resource directory.
-/// Returns the directory containing node.exe so it can be added to PATH.
+/// Locate the bundled node binary (if present).
+/// On Windows, node is bundled as an externalBin sidecar. It lives in the same
+/// directory as the main executable. Returns the exe directory so it can be
+/// added to PATH for yt-dlp to find node.
 fn get_bundled_node_dir(app: &AppHandle) -> Option<String> {
     use tauri::Manager;
-    // node.exe is bundled as a resource only on Windows builds
-    app.path()
-        .resolve("node.exe", tauri::path::BaseDirectory::Resource)
-        .ok()
-        .filter(|p| p.exists())
-        .and_then(|p| p.parent().map(|d| d.to_string_lossy().to_string()))
+    // externalBin sidecars are placed next to the main executable
+    if let Ok(exe_dir) = app.path().resource_dir() {
+        let node_candidates = ["node.exe", "node"];
+        for name in &node_candidates {
+            let candidate = exe_dir.join(name);
+            if candidate.exists() {
+                return exe_dir.to_str().map(|s| s.to_string());
+            }
+        }
+    }
+    None
 }
 
 /// Build a PATH env value with platform-appropriate locations prepended.

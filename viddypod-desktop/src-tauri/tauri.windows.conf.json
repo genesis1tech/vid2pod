@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
-    "resources": {
-      "binaries/node.exe": ""
-    }
+    "externalBin": [
+      "binaries/yt-dlp",
+      "binaries/node"
+    ]
   }
 }
