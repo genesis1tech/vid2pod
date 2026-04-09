@@ -59,18 +59,14 @@ fn detect_browser() -> &'static str {
 
 /// On Windows, locate the bundled node.exe inside the app's resource directory.
 /// Returns the directory containing node.exe so it can be added to PATH.
-#[cfg(target_os = "windows")]
 fn get_bundled_node_dir(app: &AppHandle) -> Option<String> {
     use tauri::Manager;
+    // node.exe is bundled as a resource only on Windows builds
     app.path()
         .resolve("node.exe", tauri::path::BaseDirectory::Resource)
         .ok()
+        .filter(|p| p.exists())
         .and_then(|p| p.parent().map(|d| d.to_string_lossy().to_string()))
-}
-
-#[cfg(not(target_os = "windows"))]
-fn get_bundled_node_dir(_: &AppHandle) -> Option<String> {
-    None
 }
 
 /// Build a PATH env value with platform-appropriate locations prepended.
