@@ -1,6 +1,6 @@
 [package]
 name = "viddypod-desktop"
-version = "0.1.0"
+version = "0.1.6"
 description = "ViddyPod Desktop Agent — downloads YouTube videos for your personal podcast feed"
 authors = ["Genesis 1 Technologies LLC"]
 edition = "2021"

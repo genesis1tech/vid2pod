@@ -63,19 +63,14 @@ jobs:
 
       - name: Download Node.js portable (Windows)
         if: matrix.platform == 'windows-latest'
-        shell: pwsh
+        shell: bash
         run: |
-          $nodeVersion = "v22.11.0"
-          $nodeZipName = "node-$nodeVersion-win-x64"
-          $nodeUrl = "https://nodejs.org/dist/$nodeVersion/$nodeZipName.zip"
-          New-Item -ItemType Directory -Force -Path "viddypod-desktop/src-tauri/binaries/node-windows"
-          Invoke-WebRequest -Uri $nodeUrl -OutFile "node.zip"
-          Expand-Archive -Path "node.zip" -DestinationPath "node-extracted"
-          Copy-Item "node-extracted/$nodeZipName/node.exe" "viddypod-desktop/src-tauri/binaries/node-windows/node.exe"
-          Remove-Item "node.zip"
-          Remove-Item -Recurse "node-extracted"
-          Write-Host "Bundled node.exe:"
-          Get-Item "viddypod-desktop/src-tauri/binaries/node-windows/node.exe" | Format-List Name,Length
+          mkdir -p viddypod-desktop/src-tauri/binaries/node-windows
+          curl -L -o node.zip "https://nodejs.org/dist/v22.11.0/node-v22.11.0-win-x64.zip"
+          unzip -o node.zip "node-v22.11.0-win-x64/node.exe" -d node-extracted
+          cp node-extracted/node-v22.11.0-win-x64/node.exe viddypod-desktop/src-tauri/binaries/node-windows/node.exe
+          rm -rf node.zip node-extracted
+          ls -la viddypod-desktop/src-tauri/binaries/node-windows/node.exe
 
       - name: Install npm dependencies
         working-directory: viddypod-desktop
