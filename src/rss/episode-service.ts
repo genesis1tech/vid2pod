@@ -166,6 +166,13 @@ export async function scheduleEpisode(userId: string, episodeId: string, schedul
 
 export async function deleteEpisode(userId: string, episodeId: string) {
   const db = getDb();
+  const { accessLog } = await import('../db/schema.js');
+
+  // Delete access log entries that reference this episode (FK constraint)
+  await db.delete(accessLog).where(eq(accessLog.episodeId, episodeId));
+
+  // Delete the episode
   await db.delete(episodes).where(eq(episodes.id, episodeId));
+
   log.info({ episodeId }, 'Episode deleted');
 }
