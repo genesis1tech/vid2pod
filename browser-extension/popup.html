@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ViddyPod Cookie Bridge</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      background: #0b1020;
+      color: #f1f5f9;
+      width: 320px;
+      padding: 16px;
+      font-size: 13px;
+    }
+    h1 { font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+    .row { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .dot.ok { background: #10b981; }
+    .dot.bad { background: #ef4444; }
+    .label { font-size: 12px; }
+    .meta { font-size: 11px; color: #94a3b8; margin-left: 16px; }
+    .section {
+      background: rgba(255,255,255,0.04);
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+    }
+    .section-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    input[type="text"] {
+      width: 100%;
+      padding: 6px 8px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 4px;
+      color: #f1f5f9;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 11px;
+    }
+    button {
+      background: #6366f1;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    button:hover { background: #4f46e5; }
+    button.secondary { background: rgba(255,255,255,0.1); }
+    button.secondary:hover { background: rgba(255,255,255,0.15); }
+    .button-row { display: flex; gap: 6px; margin-top: 8px; }
+    .help { font-size: 10px; color: #64748b; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <h1>ViddyPod Cookie Bridge</h1>
+
+  <div class="section">
+    <div class="section-title">Agent</div>
+    <div class="row">
+      <div id="ping-dot" class="dot bad"></div>
+      <div id="ping-label" class="label">Checking...</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Pairing</div>
+    <div class="row">
+      <div id="pair-dot" class="dot bad"></div>
+      <div id="pair-label" class="label">Not paired</div>
+    </div>
+    <input type="text" id="token-input" placeholder="Paste pair token from ViddyPod..." />
+    <div class="button-row">
+      <button id="save-btn">Save</button>
+      <button id="clear-btn" class="secondary">Clear</button>
+    </div>
+    <div class="help">Open the ViddyPod agent → Browser Extension → Copy the pair token and paste it here.</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Sync</div>
+    <div id="sync-meta" class="label">No syncs yet</div>
+    <div class="button-row">
+      <button id="sync-btn">Sync now</button>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

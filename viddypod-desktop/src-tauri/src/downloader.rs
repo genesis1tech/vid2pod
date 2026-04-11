@@ -1,9 +1,9 @@
 use anyhow::{anyhow, Result};
 use serde::Deserialize;
-use std::path::PathBuf;
-use tauri::AppHandle;
-use tauri_plugin_shell::ShellExt;
+use std::path::{Path, PathBuf};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_shell::process::CommandEvent;
+use tauri_plugin_shell::ShellExt;
 
 #[derive(Deserialize, Debug)]
 pub struct VideoMetadata {
@@ -19,56 +19,15 @@ pub struct DownloadResult {
     pub metadata: VideoMetadata,
 }
 
-/// Detect which browser the user has installed for cookie extraction.
-fn detect_browser() -> &'static str {
-    if cfg!(target_os = "macos") {
-        if std::path::Path::new("/Applications/Google Chrome.app").exists() {
-            return "chrome";
-        }
-        if std::path::Path::new("/Applications/Brave Browser.app").exists() {
-            return "brave";
-        }
-        if std::path::Path::new("/Applications/Firefox.app").exists() {
-            return "firefox";
-        }
-        return "chrome";
-    }
-    if cfg!(target_os = "windows") {
-        let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
-        let program_files = std::env::var("PROGRAMFILES").unwrap_or_default();
-        if !local_app_data.is_empty() {
-            if std::path::Path::new(&format!("{}\\Google\\Chrome\\User Data", local_app_data)).exists() {
-                return "chrome";
-            }
-            if std::path::Path::new(&format!("{}\\BraveSoftware\\Brave-Browser\\User Data", local_app_data)).exists() {
-                return "brave";
-            }
-            if std::path::Path::new(&format!("{}\\Microsoft\\Edge\\User Data", local_app_data)).exists() {
-                return "edge";
-            }
-        }
-        if !program_files.is_empty()
-            && std::path::Path::new(&format!("{}\\Google\\Chrome\\Application\\chrome.exe", program_files)).exists()
-        {
-            return "chrome";
-        }
-        return "chrome";
-    }
-    "chrome"
-}
-
 /// Locate the bundled node binary (if present).
 /// On Windows, node is bundled as an externalBin sidecar. It lives in the same
 /// directory as the main executable. Returns the exe directory so it can be
 /// added to PATH for yt-dlp to find node.
 fn get_bundled_node_dir(app: &AppHandle) -> Option<String> {
-    use tauri::Manager;
-    // externalBin sidecars are placed next to the main executable
     if let Ok(exe_dir) = app.path().resource_dir() {
         let node_candidates = ["node.exe", "node"];
         for name in &node_candidates {
-            let candidate = exe_dir.join(name);
-            if candidate.exists() {
+            if exe_dir.join(name).exists() {
                 return exe_dir.to_str().map(|s| s.to_string());
             }
         }
@@ -76,11 +35,12 @@ fn get_bundled_node_dir(app: &AppHandle) -> Option<String> {
     None
 }
 
-/// Build a PATH env value with platform-appropriate locations prepended.
+/// Build a PATH env value with platform-appropriate locations prepended so
+/// yt-dlp can always find a node binary for the JS challenge solver.
 fn build_enriched_path(app: &AppHandle) -> String {
     let mut components: Vec<String> = Vec::new();
 
-    // Bundled node.exe directory (Windows only)
+    // Bundled node.exe directory (Windows sidecar)
     if let Some(p) = get_bundled_node_dir(app) {
         components.push(p);
     }
@@ -102,54 +62,131 @@ fn build_enriched_path(app: &AppHandle) -> String {
     components.join(separator)
 }
 
-/// Translate yt-dlp's cryptic Chrome-locked stderr into a friendlier message.
-fn humanize_yt_dlp_error(stderr: &str) -> String {
+/// Path to the Netscape cookies.txt written by the cookie-bridge server.
+/// Lives in the user's local app data dir, shared between the cookie server
+/// (writer) and the downloader (reader).
+pub fn get_cookies_txt_path(app: &AppHandle) -> PathBuf {
+    app.path()
+        .app_local_data_dir()
+        .unwrap_or_else(|_| std::env::temp_dir())
+        .join("cookies.txt")
+}
+
+/// Heuristic: does this yt-dlp error indicate the video needs authentication?
+fn is_auth_error(stderr: &str) -> bool {
     let lower = stderr.to_lowercase();
-    if lower.contains("could not copy chrome cookie")
-        || lower.contains("appbound")
-        || (lower.contains("permission denied") && lower.contains("chrome"))
+    lower.contains("sign in to confirm")
+        || lower.contains("age-restricted")
+        || lower.contains("login required")
+        || lower.contains("requires authentication")
+        || lower.contains("members-only")
+        || lower.contains("private video")
+        || lower.contains("this video is available to this channel's members")
+        || lower.contains("confirm your age")
+        || lower.contains("inappropriate for some users")
+}
+
+/// Produce a friendly error message from yt-dlp's stderr when we've exhausted
+/// all download paths.
+fn humanize_final_error(stderr: &str) -> String {
+    let lower = stderr.to_lowercase();
+    if is_auth_error(&lower) {
+        return "YouTube requires sign-in for this video. Install the ViddyPod browser extension and pair it to sync cookies, then retry.".to_string();
+    }
+    if lower.contains("video unavailable") || lower.contains("removed by the uploader") {
+        return "This video is unavailable (removed, region-blocked, or made private).".to_string();
+    }
+    if lower.contains("n challenge solving failed")
+        || lower.contains("requested format is not available")
     {
-        return "Chrome must be fully closed for cookie extraction on Windows. Please quit Chrome (including any background processes from the system tray) and try again.".to_string();
-    }
-    if lower.contains("sign in to confirm you're not a bot") {
-        return "YouTube blocked the request. Make sure you're signed into YouTube in your browser, then retry.".to_string();
-    }
-    if lower.contains("n challenge solving failed") || lower.contains("requested format is not available") {
         return "YouTube's JavaScript challenge could not be solved. Make sure node is installed and accessible.".to_string();
     }
     format!("yt-dlp failed: {}", stderr.trim())
 }
 
+/// Download audio for a YouTube video. Tries cookieless first; if yt-dlp
+/// reports an auth-related failure, retries with a cookies.txt file if one
+/// has been written by the cookie-bridge server.
+///
+/// This supersedes the old `--cookies-from-browser` flow which became
+/// unreliable on Windows after Chrome 127+ introduced AppBound cookie
+/// encryption (see yt-dlp#10927). The cookie-bridge browser extension pushes
+/// cookies here via localhost HTTP, avoiding the AppBound lock entirely.
 pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadResult> {
-    let work_dir = std::env::temp_dir().join(format!("viddypod-{}", uuid_v4()));
+    match run_yt_dlp(app, video_id, None).await {
+        Ok(result) => Ok(result),
+        Err(e) => {
+            let msg = e.to_string();
+            if is_auth_error(&msg) {
+                log::info!("Cookieless download hit auth wall, retrying with cookies.txt");
+                let cookies_path = get_cookies_txt_path(app);
+                if cookies_path.exists() {
+                    return run_yt_dlp(app, video_id, Some(&cookies_path)).await;
+                }
+                return Err(anyhow!(
+                    "YouTube requires sign-in for this video. Install the ViddyPod browser extension and pair it to sync cookies."
+                ));
+            }
+            Err(e)
+        }
+    }
+}
+
+/// Run a single yt-dlp invocation with optional cookies file. Does all the
+/// workdir management, stderr capture, and info.json parsing.
+async fn run_yt_dlp(
+    app: &AppHandle,
+    video_id: &str,
+    cookies_file: Option<&Path>,
+) -> Result<DownloadResult> {
+    let work_dir = std::env::temp_dir().join(format!("viddypod-{}", unique_id()));
     std::fs::create_dir_all(&work_dir)?;
 
-    let output_template = work_dir.join("%(id)s.%(ext)s").to_string_lossy().to_string();
-    let browser = detect_browser();
+    let output_template = work_dir
+        .join("%(id)s.%(ext)s")
+        .to_string_lossy()
+        .to_string();
     let url = format!("https://www.youtube.com/watch?v={}", video_id);
 
-    log::info!("Downloading {} via {}", video_id, browser);
+    log::info!(
+        "Downloading {} (cookies: {})",
+        video_id,
+        if cookies_file.is_some() { "yes" } else { "no" }
+    );
 
     let enriched_path = build_enriched_path(app);
     log::debug!("yt-dlp PATH: {}", enriched_path);
+
+    let mut args: Vec<String> = vec![
+        "--extract-audio".into(),
+        "--audio-format".into(),
+        "mp3".into(),
+        "--audio-quality".into(),
+        "0".into(),
+        "--output".into(),
+        output_template.clone(),
+        "--write-info-json".into(),
+        "--no-playlist".into(),
+        "--no-overwrites".into(),
+        // Required for YouTube JS n-sig challenges — yt-dlp uses node (bundled
+        // on Windows, system node on macOS/Linux via enriched PATH) to
+        // evaluate Chromium's obfuscated decipher code.
+        "--js-runtimes".into(),
+        "node".into(),
+        "--remote-components".into(),
+        "ejs:github".into(),
+    ];
+    if let Some(path) = cookies_file {
+        args.push("--cookies".into());
+        args.push(path.to_string_lossy().to_string());
+    }
+    args.push(url);
 
     let shell = app.shell();
     let (mut rx, _child) = shell
         .sidecar("yt-dlp")?
         .env("PATH", enriched_path)
-        .args([
-            "--extract-audio",
-            "--audio-format", "mp3",
-            "--audio-quality", "0",
-            "--output", &output_template,
-            "--write-info-json",
-            "--no-playlist",
-            "--no-overwrites",
-            "--js-runtimes", "node",
-            "--remote-components", "ejs:github",
-            "--cookies-from-browser", browser,
-            &url,
-        ])
+        .args(args)
         .spawn()?;
 
     let mut stderr_buf = String::new();
@@ -166,7 +203,7 @@ pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadR
             }
             CommandEvent::Terminated(payload) => {
                 if payload.code.unwrap_or(-1) != 0 {
-                    return Err(anyhow!("{}", humanize_yt_dlp_error(&stderr_buf)));
+                    return Err(anyhow!("{}", humanize_final_error(&stderr_buf)));
                 }
                 break;
             }
@@ -174,7 +211,7 @@ pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadR
         }
     }
 
-    // Find the output mp3 and info json
+    // Find the output mp3 and info.json
     let mut audio_path = None;
     let mut info_path = None;
     for entry in std::fs::read_dir(&work_dir)? {
@@ -196,7 +233,10 @@ pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadR
         let json: serde_json::Value = serde_json::from_str(&raw)?;
         VideoMetadata {
             title: json.get("title").and_then(|v| v.as_str()).map(String::from),
-            description: json.get("description").and_then(|v| v.as_str()).map(String::from),
+            description: json
+                .get("description")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             duration: json.get("duration").and_then(|v| v.as_f64()),
             thumbnail: json.get("thumbnail").and_then(|v| v.as_str()).map(String::from),
         }
@@ -218,7 +258,7 @@ pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadR
     })
 }
 
-fn uuid_v4() -> String {
+fn unique_id() -> String {
     use std::time::{SystemTime, UNIX_EPOCH};
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
