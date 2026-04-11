@@ -10,6 +10,7 @@ use tokio::sync::Mutex;
 static QUITTING: AtomicBool = AtomicBool::new(false);
 
 mod auth;
+mod cookie_server;
 mod downloader;
 mod poller;
 mod state;
@@ -76,6 +77,48 @@ pub fn run() {
                     s.token = Some(token);
                     drop(s);
                     app_handle.emit("status-updated", ()).ok();
+                });
+            }
+
+            // Resolve local data dir for the pair token + cookies.txt
+            let data_dir = app
+                .path()
+                .app_local_data_dir()
+                .unwrap_or_else(|_| std::env::temp_dir());
+            let cookies_path = data_dir.join("cookies.txt");
+
+            // Load or generate the pair token for the cookie-bridge server
+            let pair_token = cookie_server::load_or_generate_pair_token(&data_dir)
+                .unwrap_or_else(|e| {
+                    log::error!("Failed to load/generate pair token: {}", e);
+                    String::new()
+                });
+
+            // Stash the pair token in AppState so the UI can render it
+            {
+                let state = app_state.clone();
+                let token_clone = pair_token.clone();
+                tauri::async_runtime::spawn(async move {
+                    let mut s = state.lock().await;
+                    s.pair_token = token_clone;
+                });
+            }
+
+            // Spawn the cookie-bridge HTTP server
+            {
+                let state = app_state.clone();
+                let token_clone = pair_token.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(e) = cookie_server::run_cookie_server(
+                        state,
+                        cookie_server::DEFAULT_PORT,
+                        token_clone,
+                        cookies_path,
+                    )
+                    .await
+                    {
+                        log::error!("Cookie server exited with error: {}", e);
+                    }
                 });
             }
 

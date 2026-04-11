@@ -3,4 +3,6 @@ dist/
 src-tauri/target/
 src-tauri/gen/
 src-tauri/binaries/yt-dlp-*
+src-tauri/binaries/node-*
 .DS_Store
+Thumbs.db

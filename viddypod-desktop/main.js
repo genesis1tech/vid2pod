@@ -8,12 +8,19 @@ const emailEl = document.getElementById('email');
 const signinBtn = document.getElementById('signin-btn');
 const signoutBtn = document.getElementById('signout-btn');
 const downloadsEl = document.getElementById('downloads');
+const extDot = document.getElementById('ext-dot');
+const extStatusText = document.getElementById('ext-status-text');
+const pairTokenEl = document.getElementById('pair-token');
+const copyTokenBtn = document.getElementById('copy-token');
+const syncMetaEl = document.getElementById('sync-meta');
 
 const SERVER = 'https://vid2pod.g1tech.cloud';
 
 async function refreshStatus() {
   try {
     const status = await invoke('get_status');
+
+    // Server sign-in state
     if (status.signed_in) {
       dot.className = 'dot connected';
       statusText.textContent = status.processing ? 'Downloading...' : 'Connected';
@@ -28,11 +35,28 @@ async function refreshStatus() {
       signinBtn.style.display = 'inline-block';
       signoutBtn.style.display = 'none';
     }
+
+    // Browser extension state
+    if (status.extension_connected) {
+      extDot.className = 'dot connected';
+      extStatusText.textContent = `Extension: connected (${status.cookie_count} cookies)`;
+    } else {
+      extDot.className = 'dot disconnected';
+      extStatusText.textContent = 'Extension: not connected';
+    }
+    pairTokenEl.textContent = status.pair_token || '—';
+    if (status.last_cookie_sync) {
+      syncMetaEl.textContent = `Last sync: ${formatTime(status.last_cookie_sync)}`;
+    } else {
+      syncMetaEl.textContent = 'No cookies synced yet';
+    }
+
+    // Recent downloads
     if (status.recent_downloads && status.recent_downloads.length > 0) {
       downloadsEl.innerHTML = status.recent_downloads.map(d => `
         <div class="download-item">
           <div class="title">${escape(d.title)}</div>
-          <div class="meta">${d.status} · ${formatTime(d.completed_at)}</div>
+          <div class="meta">${escape(d.status)} · ${formatTime(d.completed_at)}</div>
         </div>
       `).join('');
     }
@@ -54,8 +78,6 @@ function formatTime(iso) {
 }
 
 signinBtn.addEventListener('click', async () => {
-  // Open the agent-connect page in the user's browser.
-  // The web app will require login, then redirect to viddypod://callback?token=...
   await open(`${SERVER}/agent-connect`);
 });
 
@@ -64,9 +86,20 @@ signoutBtn.addEventListener('click', async () => {
   refreshStatus();
 });
 
-// Listen for status updates from the Rust core
+copyTokenBtn.addEventListener('click', async () => {
+  const token = pairTokenEl.textContent;
+  if (!token || token === '—' || token === 'loading...') return;
+  try {
+    await navigator.clipboard.writeText(token);
+    const original = copyTokenBtn.textContent;
+    copyTokenBtn.textContent = 'Copied!';
+    setTimeout(() => { copyTokenBtn.textContent = original; }, 1500);
+  } catch (e) {
+    console.error('Copy failed:', e);
+  }
+});
+
 listen('status-updated', () => refreshStatus());
 
-// Initial load + periodic refresh
 refreshStatus();
 setInterval(refreshStatus, 5000);
