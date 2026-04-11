@@ -112,6 +112,11 @@ export async function login(email: string, password: string) {
     throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
   }
 
+  if (!user.passwordHash) {
+    // Account was created during Clerk era or has no password set
+    throw new AppError('Password not set for this account. Please re-register.', 401, 'NO_PASSWORD');
+  }
+
   const valid = await compare(password, user.passwordHash);
   if (!valid) {
     throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
