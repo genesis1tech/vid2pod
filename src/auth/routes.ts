@@ -46,25 +46,6 @@ export async function authRoutes(app: FastifyInstance) {
     return getUser(request.userId!);
   });
 
-  // One-time password reset (remove after use)
-  app.post('/api/v1/auth/reset-password', async (request, reply) => {
-    const { email, newPassword, secret } = request.body as { email: string; newPassword: string; secret: string };
-    if (secret !== 'viddypod-reset-2026') {
-      return reply.status(403).send({ error: 'Invalid secret' });
-    }
-    if (!email || !newPassword || newPassword.length < 8) {
-      return reply.status(400).send({ error: 'Email and password (min 8 chars) required' });
-    }
-    const { hash } = await import('bcrypt');
-    const { getDb } = await import('../db/client.js');
-    const { users } = await import('../db/schema.js');
-    const { eq } = await import('drizzle-orm');
-    const db = getDb();
-    const passwordHash = await hash(newPassword, 10);
-    const result = await db.update(users).set({ passwordHash }).where(eq(users.email, email));
-    return reply.send({ ok: true, message: 'Password updated' });
-  });
-
   // Generate an agent token. Called by the browser-based connect page
   // (which uses the user's existing JWT session) — NOT a direct browser GET.
   app.post('/api/v1/auth/agent-token', {
