@@ -80,15 +80,15 @@ export function EpisodeList({ episodes, loading, onRefresh }: EpisodeListProps) 
       <div className="space-y-3">
         {episodes.map((ep) => (
           <div key={ep.id} className="card flex gap-3 sm:gap-4">
-            {/* Thumbnail */}
+            {/* Thumbnail (16:9 YouTube aspect ratio) */}
             {ep.imageUrl ? (
               <img
                 src={ep.imageUrl}
                 alt=""
-                className="w-16 h-16 sm:w-20 sm:h-20 rounded object-cover flex-shrink-0"
+                className="w-28 h-16 sm:w-36 sm:h-20 rounded object-cover flex-shrink-0"
               />
             ) : (
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded bg-(--color-bg) flex-shrink-0 flex items-center justify-center text-(--color-text-muted) text-xs">
+              <div className="w-28 h-16 sm:w-36 sm:h-20 rounded bg-(--color-bg) flex-shrink-0 flex items-center justify-center text-(--color-text-muted) text-xs">
                 No art
               </div>
             )}
