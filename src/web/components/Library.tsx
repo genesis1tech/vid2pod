@@ -99,6 +99,9 @@ export function Library() {
                   <p className="text-xs text-(--color-text-muted) text-center max-w-xs">
                     Scan with your phone to subscribe in your podcast app
                   </p>
+                  <p className="text-xs text-(--color-text-muted) text-center max-w-xs mt-2">
+                    Tesla &amp; car displays: Play from your phone app via Bluetooth. Tesla does not support Apple Podcasts or custom RSS feeds on the car screen.
+                  </p>
                 </div>
               )}
             </div>

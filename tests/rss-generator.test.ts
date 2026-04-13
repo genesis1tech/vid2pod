@@ -31,7 +31,7 @@ describe('RSS Generator', () => {
     expect(xml).toContain('<itunes:author>Test Author</itunes:author>');
     expect(xml).toContain('<itunes:type>episodic</itunes:type>');
     expect(xml).toContain('<itunes:category text="Technology"/>');
-    expect(xml).toContain('<itunes:explicit>no</itunes:explicit>');
+    expect(xml).toContain('<itunes:explicit>false</itunes:explicit>');
   });
 
   test('generates episodes with enclosure tags', () => {

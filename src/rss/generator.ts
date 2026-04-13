@@ -104,6 +104,7 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
   const ITUNES_NS = 'http://www.itunes.com/dtds/podcast-1.0.dtd';
   const CONTENT_NS = 'http://purl.org/rss/1.0/modules/content/';
   const PODCAST_NS = 'https://podcastindex.org/namespace/1.0';
+  const ATOM_NS = 'http://www.w3.org/2005/Atom';
 
   const feedUrl = `${feed.baseUrl}/feed/${feed.ownershipToken}.xml`;
 
@@ -112,12 +113,15 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
   xml += `  xmlns:itunes="${ITUNES_NS}"\n`;
   xml += `  xmlns:content="${CONTENT_NS}"\n`;
   xml += `  xmlns:podcast="${PODCAST_NS}"\n`;
+  xml += `  xmlns:atom="${ATOM_NS}"\n`;
   xml += `>\n`;
   xml += `  <channel>\n`;
   xml += `    <title>${escapeXml(feed.title)}</title>\n`;
   xml += `    <link>${escapeXml(feed.websiteUrl || feedUrl)}</link>\n`;
+  xml += `    <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml"/>\n`;
   xml += `    <description>${escapeXml(feed.description)}</description>\n`;
   xml += `    <language>${escapeXml(feed.language)}</language>\n`;
+  xml += `    <lastBuildDate>${new Date().toUTCString()}</lastBuildDate>\n`;
 
   if (feed.copyright) {
     xml += `    <copyright>${escapeXml(feed.copyright)}</copyright>\n`;
@@ -147,7 +151,7 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
     xml += `    <itunes:category text="${escapeXml(feed.categorySecondary)}"/>\n`;
   }
 
-  xml += `    <itunes:explicit>${feed.explicit ? 'yes' : 'no'}</itunes:explicit>\n`;
+  xml += `    <itunes:explicit>${feed.explicit ? 'true' : 'false'}</itunes:explicit>\n`;
   xml += `    <itunes:type>${escapeXml(feed.feedType)}</itunes:type>\n`;
 
   xml += `    <itunes:owner>\n`;
@@ -178,7 +182,7 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
     }
 
     xml += `      <itunes:duration>${ep.durationSeconds != null ? getDurationFromSeconds(ep.durationSeconds) : '0:00'}</itunes:duration>\n`;
-    xml += `      <itunes:explicit>${ep.explicit ? 'yes' : 'no'}</itunes:explicit>\n`;
+    xml += `      <itunes:explicit>${ep.explicit ? 'true' : 'false'}</itunes:explicit>\n`;
     xml += `      <itunes:episodeType>${escapeXml(ep.episodeType)}</itunes:episodeType>\n`;
 
     if (ep.seasonNumber != null) {

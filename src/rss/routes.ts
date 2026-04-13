@@ -177,6 +177,9 @@ export async function feedRoutes(app: FastifyInstance) {
     .divider { color: #475569; font-size: 12px; margin: 16px 0; }
     .feed-url { font-size: 11px; color: #64748b; word-break: break-all; margin-top: 16px; }
     #copied { display: none; color: #22c55e; font-size: 13px; margin-top: 8px; }
+    .note { background: #1e293b; border: 1px solid #334155; border-radius: 10px; padding: 14px 16px; margin-top: 20px; text-align: left; }
+    .note-title { font-size: 13px; font-weight: 600; color: #f59e0b; margin-bottom: 6px; }
+    .note-text { font-size: 12px; color: #94a3b8; line-height: 1.5; }
   </style>
 </head>
 <body>
@@ -193,6 +196,12 @@ export async function feedRoutes(app: FastifyInstance) {
       <div id="copied">Copied!</div>
     </div>
     <div class="feed-url">${feedUrl}</div>
+    <div class="note">
+      <div class="note-title">Tesla / Car Displays</div>
+      <div class="note-text">
+        Tesla does not support Apple Podcasts or custom podcast feeds on the car screen. To listen in your Tesla, play from your phone's podcast app and connect via Bluetooth — audio will come through your car speakers.
+      </div>
+    </div>
   </div>
   <script>
     // Auto-redirect based on platform
@@ -235,7 +244,7 @@ export async function feedRoutes(app: FastifyInstance) {
       request.ip,
       request.headers['user-agent'],
     );
-    reply.type('application/xml; charset=utf-8');
+    reply.type('application/rss+xml; charset=utf-8');
     return xml;
   });
 
