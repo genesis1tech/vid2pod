@@ -235,7 +235,7 @@ export async function feedRoutes(app: FastifyInstance) {
       request.ip,
       request.headers['user-agent'],
     );
-    reply.type('application/xml; charset=utf-8');
+    reply.type('application/rss+xml; charset=utf-8');
     return xml;
   });
 

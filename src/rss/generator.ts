@@ -104,20 +104,32 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
   const ITUNES_NS = 'http://www.itunes.com/dtds/podcast-1.0.dtd';
   const CONTENT_NS = 'http://purl.org/rss/1.0/modules/content/';
   const PODCAST_NS = 'https://podcastindex.org/namespace/1.0';
+  const ATOM_NS = 'http://www.w3.org/2005/Atom';
 
   const feedUrl = `${feed.baseUrl}/feed/${feed.ownershipToken}.xml`;
+
+  // Determine lastBuildDate and channel pubDate from most recent episode
+  const publishedItems = items.filter(ep => ep.status === 'published' && ep.publishedAt);
+  const mostRecentPubDate = publishedItems.length > 0
+    ? new Date(Math.max(...publishedItems.map(ep => new Date(ep.publishedAt!).getTime())))
+    : new Date();
+  const lastBuildDate = new Date();
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
   xml += `<rss version="2.0"\n`;
   xml += `  xmlns:itunes="${ITUNES_NS}"\n`;
   xml += `  xmlns:content="${CONTENT_NS}"\n`;
   xml += `  xmlns:podcast="${PODCAST_NS}"\n`;
+  xml += `  xmlns:atom="${ATOM_NS}"\n`;
   xml += `>\n`;
   xml += `  <channel>\n`;
   xml += `    <title>${escapeXml(feed.title)}</title>\n`;
   xml += `    <link>${escapeXml(feed.websiteUrl || feedUrl)}</link>\n`;
   xml += `    <description>${escapeXml(feed.description)}</description>\n`;
   xml += `    <language>${escapeXml(feed.language)}</language>\n`;
+  xml += `    <lastBuildDate>${lastBuildDate.toUTCString()}</lastBuildDate>\n`;
+  xml += `    <pubDate>${mostRecentPubDate.toUTCString()}</pubDate>\n`;
+  xml += `    <atom:link href="${escapeXml(feedUrl)}" rel="self" type="application/rss+xml"/>\n`;
 
   if (feed.copyright) {
     xml += `    <copyright>${escapeXml(feed.copyright)}</copyright>\n`;
@@ -128,6 +140,7 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
   }
 
   xml += `    <itunes:author>${escapeXml(feed.author)}</itunes:author>\n`;
+  xml += `    <itunes:summary>${escapeXml(feed.description)}</itunes:summary>\n`;
 
   if (feed.subtitle) {
     xml += `    <itunes:subtitle>${escapeXml(feed.subtitle)}</itunes:subtitle>\n`;
@@ -147,7 +160,7 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
     xml += `    <itunes:category text="${escapeXml(feed.categorySecondary)}"/>\n`;
   }
 
-  xml += `    <itunes:explicit>${feed.explicit ? 'yes' : 'no'}</itunes:explicit>\n`;
+  xml += `    <itunes:explicit>${feed.explicit ? 'true' : 'false'}</itunes:explicit>\n`;
   xml += `    <itunes:type>${escapeXml(feed.feedType)}</itunes:type>\n`;
 
   xml += `    <itunes:owner>\n`;
@@ -173,12 +186,14 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
       xml += `      <pubDate>${escapeXml(pubDate)}</pubDate>\n`;
     }
 
+    xml += `      <itunes:summary>${escapeXml(ep.description.substring(0, 4000))}</itunes:summary>\n`;
+
     if (ep.subtitle) {
       xml += `      <itunes:subtitle>${escapeXml(ep.subtitle)}</itunes:subtitle>\n`;
     }
 
     xml += `      <itunes:duration>${ep.durationSeconds != null ? getDurationFromSeconds(ep.durationSeconds) : '0:00'}</itunes:duration>\n`;
-    xml += `      <itunes:explicit>${ep.explicit ? 'yes' : 'no'}</itunes:explicit>\n`;
+    xml += `      <itunes:explicit>${ep.explicit ? 'true' : 'false'}</itunes:explicit>\n`;
     xml += `      <itunes:episodeType>${escapeXml(ep.episodeType)}</itunes:episodeType>\n`;
 
     if (ep.seasonNumber != null) {
