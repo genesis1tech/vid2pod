@@ -40,15 +40,12 @@ export async function downloadAudio(videoId: string): Promise<YtDlpResult> {
   await mkdir(workDir, { recursive: true });
 
   const outputTemplate = join(workDir, '%(id)s.%(ext)s');
-  const metadataPath = join(workDir, 'metadata.json');
 
   log.info({ videoId, workDir }, 'Starting YouTube audio download');
 
   // Build yt-dlp args
   const args = [
-    '--extract-audio',
-    '--audio-format', 'mp3',
-    '--audio-quality', '0',
+    '--format', 'bestaudio/best',
     '--output', outputTemplate,
     '--write-info-json',
     '--no-playlist',
@@ -79,11 +76,11 @@ export async function downloadAudio(videoId: string): Promise<YtDlpResult> {
   // Read the metadata json yt-dlp wrote
   const { readFile, readdir } = await import('fs/promises');
   const files = await readdir(workDir);
-  const audioFile = files.find(f => f.endsWith('.mp3'));
+  const audioFile = files.find(f => !f.endsWith('.info.json'));
   const infoFile = files.find(f => f.endsWith('.info.json'));
 
   if (!audioFile) {
-    throw new Error(`yt-dlp did not produce an mp3 file in ${workDir}`);
+    throw new Error(`yt-dlp did not produce an audio file in ${workDir}`);
   }
 
   let metadata: YtDlpResult['metadata'] = {
