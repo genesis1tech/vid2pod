@@ -21,6 +21,7 @@ services:
       S3_REGION: us-east-1
       JWT_SECRET: ${JWT_SECRET}
       BASE_URL: https://vid2pod.g1tech.cloud
+      ALLOWED_ORIGINS: https://vid2pod.g1tech.cloud
       NODE_ENV: production
       POLL_INTERVAL_MS: "60000"
     restart: unless-stopped

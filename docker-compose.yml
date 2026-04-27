@@ -23,6 +23,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
       BASE_URL: ${BASE_URL:-http://localhost:3000}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       NODE_ENV: ${NODE_ENV:-development}
     volumes:
       - ./src:/app/src
@@ -47,6 +48,7 @@ services:
       S3_REGION: us-east-1
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
       BASE_URL: ${BASE_URL:-http://localhost:3000}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       NODE_ENV: ${NODE_ENV:-development}
 
   postgres:
