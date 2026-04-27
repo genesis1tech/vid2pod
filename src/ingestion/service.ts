@@ -1,5 +1,5 @@
 import { getDb } from '../db/client.js';
-import { assets, youtubeMetadata } from '../db/schema.js';
+import { assets, youtubeMetadata, episodes, accessLog, processingJobs } from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
 import { createHash } from 'crypto';
@@ -97,10 +97,38 @@ export async function deleteAsset(userId: string, assetId: string) {
   const db = getDb();
   const asset = await getAsset(userId, assetId);
 
+  // Clean up dependent records before deleting the asset.
+  // Order matters to respect FK constraints:
+  // 1. access_log → episodes (via episodeId FK)
+  // 2. episodes → assets (via assetId FK)
+  // 3. youtube_metadata → assets (via assetId FK)
+  // 4. processing_jobs → assets (via assetId FK)
+
+  // Find all episodes linked to this asset
+  const linkedEpisodes = await db.select({ id: episodes.id })
+    .from(episodes)
+    .where(eq(episodes.assetId, assetId));
+
+  // Delete access log entries for those episodes
+  for (const ep of linkedEpisodes) {
+    await db.delete(accessLog).where(eq(accessLog.episodeId, ep.id));
+  }
+
+  // Delete the linked episodes
+  await db.delete(episodes).where(eq(episodes.assetId, assetId));
+
+  // Delete YouTube metadata linked to this asset
+  await db.delete(youtubeMetadata).where(eq(youtubeMetadata.assetId, assetId));
+
+  // Delete processing jobs linked to this asset
+  await db.delete(processingJobs).where(eq(processingJobs.assetId, assetId));
+
+  // Delete S3 file (best effort)
   if (asset.storageKey) {
     try { await deleteFile(asset.storageKey); } catch { /* best effort */ }
   }
 
+  // Finally delete the asset itself
   await db.delete(assets).where(eq(assets.id, assetId));
   log.info({ assetId }, 'Asset deleted');
 }
