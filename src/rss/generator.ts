@@ -49,20 +49,20 @@ function normalizeFeed(raw: any): NormalizedFeed {
   return {
     id: raw.id,
     title: raw.title,
-    subtitle: raw.subtitle ?? raw.subtitle_text ?? null,
+    subtitle: raw.subtitle ?? null,
     description: raw.description,
-    author: raw.author ?? raw.author_name ?? '',
-    email: raw.email ?? raw.owner_email ?? null,
-    websiteUrl: raw.websiteUrl ?? raw.website_url ?? raw.link ?? null,
+    author: raw.author ?? '',
+    email: raw.email ?? null,
+    websiteUrl: raw.websiteUrl ?? null,
     language: raw.language ?? 'en',
     copyright: raw.copyright ?? null,
-    imageUrl: raw.imageUrl ?? raw.image_url ?? raw.image ?? null,
-    categoryPrimary: raw.categoryPrimary ?? raw.category_primary ?? '',
-    categorySecondary: raw.categorySecondary ?? raw.category_secondary ?? null,
+    imageUrl: raw.imageUrl ?? null,
+    categoryPrimary: raw.categoryPrimary ?? '',
+    categorySecondary: raw.categorySecondary ?? null,
     explicit: raw.explicit ?? false,
-    feedType: raw.feedType ?? raw.feed_type ?? 'episodic',
-    ownershipToken: raw.ownershipToken ?? raw.ownership_token ?? '',
-    baseUrl: raw.baseUrl ?? raw.base_url ?? '',
+    feedType: raw.feedType ?? 'episodic',
+    ownershipToken: raw.ownershipToken ?? '',
+    baseUrl: raw.baseUrl ?? '',
   };
 }
 
@@ -70,21 +70,21 @@ function normalizeEpisode(raw: any): NormalizedEpisode {
   return {
     id: raw.id,
     title: raw.title,
-    subtitle: raw.subtitle ?? raw.subtitle_text ?? null,
+    subtitle: raw.subtitle ?? null,
     description: raw.description,
-    seasonNumber: raw.seasonNumber ?? raw.season_number ?? null,
-    episodeNumber: raw.episodeNumber ?? raw.episode_number ?? null,
-    episodeType: raw.episodeType ?? raw.episode_type ?? 'full',
-    enclosureUrl: raw.enclosureUrl ?? raw.enclosure_url ?? null,
-    enclosureSize: raw.enclosureSize ?? raw.enclosure_size ?? null,
-    enclosureType: raw.enclosureType ?? raw.enclosure_type ?? 'audio/mpeg',
-    durationSeconds: raw.durationSeconds ?? raw.duration_seconds ?? null,
-    imageUrl: raw.imageUrl ?? raw.image_url ?? null,
+    seasonNumber: raw.seasonNumber ?? null,
+    episodeNumber: raw.episodeNumber ?? null,
+    episodeType: raw.episodeType ?? 'full',
+    enclosureUrl: raw.enclosureUrl ?? null,
+    enclosureSize: raw.enclosureSize ?? null,
+    enclosureType: raw.enclosureType ?? 'audio/mpeg',
+    durationSeconds: raw.durationSeconds ?? null,
+    imageUrl: raw.imageUrl ?? null,
     explicit: raw.explicit ?? false,
     guid: raw.guid,
-    publishedAt: raw.publishedAt ?? raw.published_at ?? null,
+    publishedAt: raw.publishedAt ?? null,
     status: raw.status ?? 'draft',
-    sortOrder: raw.sortOrder ?? raw.sort_order ?? 0,
+    sortOrder: raw.sortOrder ?? 0,
   };
 }
 
@@ -177,8 +177,8 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
     xml += `      <description>${escapeXml(ep.description)}</description>\n`;
     xml += `      <guid isPermaLink="false">${escapeXml(ep.guid)}</guid>\n`;
 
-    if (ep.enclosureUrl) {
-      xml += `      <enclosure url="${escapeXml(ep.enclosureUrl)}" length="${ep.enclosureSize ?? 0}" type="${escapeXml(ep.enclosureType)}"/>\n`;
+    if (ep.enclosureUrl && ep.enclosureSize) {
+      xml += `      <enclosure url="${escapeXml(ep.enclosureUrl)}" length="${ep.enclosureSize}" type="${escapeXml(ep.enclosureType)}"/>\n`;
     }
 
     if (ep.publishedAt) {

@@ -23,7 +23,7 @@ export async function serveFeed(token: string, authHeader?: string, ip?: string,
 }
 
 export async function authenticateFeedAccess(feed: any, authHeader?: string) {
-  if (feed.auth_type === 'basic_auth') {
+  if (feed.authType === 'basic_auth') {
     if (!authHeader?.startsWith('Basic ')) {
       throw new UnauthorizedError('Authentication required');
     }
@@ -31,11 +31,11 @@ export async function authenticateFeedAccess(feed: any, authHeader?: string) {
     const decoded = Buffer.from(authHeader.slice(6), 'base64').toString();
     const [username, password] = decoded.split(':');
 
-    if (username !== feed.auth_username || !feed.auth_password_hash) {
+    if (username !== feed.authUsername || !feed.authPasswordHash) {
       throw new UnauthorizedError('Invalid credentials');
     }
 
-    const valid = await compare(password, feed.auth_password_hash);
+    const valid = await compare(password, feed.authPasswordHash);
     if (!valid) throw new UnauthorizedError('Invalid credentials');
   }
 }

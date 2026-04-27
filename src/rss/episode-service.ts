@@ -136,6 +136,10 @@ export async function publishEpisode(userId: string, episodeId: string) {
   const db = getDb();
   const episode = await getEpisode(userId, episodeId);
 
+  if (episode.status !== 'draft' && episode.status !== 'scheduled' && episode.status !== 'publishing') {
+    throw new ValidationError(`Cannot publish episode in '${episode.status}' status`);
+  }
+
   if (episode.assetId) {
     const assetRows = await db.select().from(assets).where(eq(assets.id, episode.assetId)).limit(1);
     if (assetRows.length > 0 && assetRows[0].licenseId) {
