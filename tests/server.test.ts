@@ -6,7 +6,7 @@ let app: FastifyInstance;
 let stopScheduler: () => void;
 
 beforeAll(async () => {
-  const server = await createServer();
+  const server = await createServer({ skipWebServing: true });
   app = server.app;
   stopScheduler = server.stopScheduler;
   await app.ready();

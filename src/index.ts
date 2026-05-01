@@ -17,7 +17,7 @@ import { startScheduler } from './rss/scheduler.js';
 
 const log = createChildLogger('server');
 
-export async function createServer() {
+export async function createServer(options?: { skipWebServing?: boolean }) {
   const config = getConfig();
   const app = Fastify({
     logger: false,
@@ -25,7 +25,11 @@ export async function createServer() {
     requestIdLogLabel: 'requestId',
   });
 
-  await app.register(cors, { origin: true });
+  const allowedOrigins = config.ALLOWED_ORIGINS.split(',').map(s => s.trim()).filter(Boolean);
+  await app.register(cors, {
+    origin: allowedOrigins,
+    credentials: true,
+  });
   await app.register(multipart, { limits: { fileSize: 500 * 1024 * 1024 } });
 
   app.addHook('onRequest', (request, reply, done) => {
@@ -71,7 +75,7 @@ export async function createServer() {
   // Serve built frontend in production
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const webDir = resolve(__dirname, '../dist/web');
-  if (existsSync(webDir)) {
+  if (!options?.skipWebServing && existsSync(webDir)) {
     await app.register(fastifyStatic, {
       root: webDir,
       prefix: '/',

@@ -1,8 +1,7 @@
 import {
-  pgTable, uuid, text, varchar, boolean, integer, bigint, timestamp, date, jsonb,
-  check, unique,
+  pgTable, uuid, text, boolean, integer, bigint, timestamp, date, jsonb,
+  index,
 } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -23,7 +22,9 @@ export const apiTokens = pgTable('api_tokens', {
   tokenPrefix: text('token_prefix').notNull(),
   lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('api_tokens_user_id_idx').on(table.userId),
+]);
 
 export const licenses = pgTable('licenses', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -43,7 +44,9 @@ export const licenses = pgTable('licenses', {
   notes: text('notes'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('licenses_user_id_idx').on(table.userId),
+]);
 
 export const assets = pgTable('assets', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -65,7 +68,12 @@ export const assets = pgTable('assets', {
   }).notNull().default('pending'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('assets_user_id_idx').on(table.userId),
+  index('assets_license_id_idx').on(table.licenseId),
+  index('assets_processing_status_idx').on(table.processingStatus),
+  index('assets_youtube_video_id_idx').on(table.youtubeVideoId),
+]);
 
 export const youtubeMetadata = pgTable('youtube_metadata', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -81,7 +89,9 @@ export const youtubeMetadata = pgTable('youtube_metadata', {
   categoryId: text('category_id'),
   fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
   rawResponse: jsonb('raw_response'),
-});
+}, (table) => [
+  index('youtube_metadata_asset_id_idx').on(table.assetId),
+]);
 
 export const feeds = pgTable('feeds', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -111,7 +121,9 @@ export const feeds = pgTable('feeds', {
   lastPublishedAt: timestamp('last_published_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('feeds_user_id_idx').on(table.userId),
+]);
 
 export const episodes = pgTable('episodes', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -134,7 +146,7 @@ export const episodes = pgTable('episodes', {
   publishedAt: timestamp('published_at', { withTimezone: true }),
   scheduledAt: timestamp('scheduled_at', { withTimezone: true }),
   status: text('status', {
-    enum: ['draft', 'scheduled', 'published', 'retired'],
+    enum: ['draft', 'scheduled', 'publishing', 'published', 'retired'],
   }).notNull().default('draft'),
   sortOrder: integer('sort_order').notNull().default(0),
   firstDownloadedAt: timestamp('first_downloaded_at', { withTimezone: true }),
@@ -142,7 +154,12 @@ export const episodes = pgTable('episodes', {
   storageCleared: boolean('storage_cleared').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('episodes_feed_id_idx').on(table.feedId),
+  index('episodes_asset_id_idx').on(table.assetId),
+  index('episodes_status_idx').on(table.status),
+  index('episodes_storage_cleanup_idx').on(table.storageCleared, table.storageExpiry),
+]);
 
 export const accessLog = pgTable('access_log', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -152,7 +169,11 @@ export const accessLog = pgTable('access_log', {
   userAgent: text('user_agent'),
   accessedAt: timestamp('accessed_at', { withTimezone: true }).notNull().defaultNow(),
   authMethod: text('auth_method'),
-});
+}, (table) => [
+  index('access_log_feed_id_idx').on(table.feedId),
+  index('access_log_episode_id_idx').on(table.episodeId),
+  index('access_log_accessed_at_idx').on(table.accessedAt),
+]);
 
 export const processingJobs = pgTable('processing_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -166,4 +187,7 @@ export const processingJobs = pgTable('processing_jobs', {
   startedAt: timestamp('started_at', { withTimezone: true }),
   completedAt: timestamp('completed_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index('processing_jobs_asset_id_idx').on(table.assetId),
+  index('processing_jobs_status_idx').on(table.status),
+]);

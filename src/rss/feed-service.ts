@@ -1,5 +1,5 @@
 import { getDb } from '../db/client.js';
-import { feeds } from '../db/schema.js';
+import { feeds, accessLog, episodes } from '../db/schema.js';
 import { eq, and } from 'drizzle-orm';
 import { getConfig } from '../config.js';
 import { createChildLogger } from '../shared/logger.js';
@@ -112,6 +112,25 @@ export async function updateFeed(userId: string, feedId: string, updates: Record
 export async function deleteFeed(userId: string, feedId: string) {
   const db = getDb();
   await getFeed(userId, feedId);
+
+  // Clean up access_log entries before deleting the feed.
+  // Although episodes cascade-delete when a feed is deleted (onDelete: 'cascade'),
+  // access_log rows reference both episodes and feeds with RESTRICT FKs,
+  // which would block both the cascaded episode deletion and the feed deletion.
+  // Must delete access_log rows for episodes in this feed first,
+  // then delete access_log rows that reference the feed directly.
+  const feedEpisodes = await db.select({ id: episodes.id })
+    .from(episodes)
+    .where(eq(episodes.feedId, feedId));
+
+  for (const ep of feedEpisodes) {
+    await db.delete(accessLog).where(eq(accessLog.episodeId, ep.id));
+  }
+
+  // Delete access_log entries that reference the feed directly
+  await db.delete(accessLog).where(eq(accessLog.feedId, feedId));
+
+  // Now safe to delete the feed (episodes cascade-delete)
   await db.delete(feeds).where(eq(feeds.id, feedId));
   log.info({ feedId }, 'Feed deleted');
 }

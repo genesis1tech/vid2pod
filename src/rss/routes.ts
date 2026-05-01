@@ -12,7 +12,7 @@ import { serveFeed } from '../publishing/feed-server.js';
 import { getPodcastFile, getPodcastFileInfo } from '../publishing/storage.js';
 import { getDb } from '../db/client.js';
 import { episodes } from '../db/schema.js';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, like, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { getConfig } from '../config.js';
 import { PODCAST_CATEGORIES } from '../shared/constants.js';
@@ -235,7 +235,7 @@ export async function feedRoutes(app: FastifyInstance) {
       request.ip,
       request.headers['user-agent'],
     );
-    reply.type('application/xml; charset=utf-8');
+    reply.type('application/rss+xml; charset=utf-8');
     return xml;
   });
 
@@ -290,37 +290,33 @@ export async function feedRoutes(app: FastifyInstance) {
 const STORAGE_TTL_DAYS = 7;
 
 async function flagFirstDownload(storageKey: string): Promise<void> {
-  const enclosureUrl = `%/storage/${storageKey}`;
   const db = getDb();
 
-  // Find episodes whose enclosure URL matches this storage key and haven't been flagged yet
+  const now = new Date();
+  const expiry = new Date(now.getTime() + STORAGE_TTL_DAYS * 24 * 60 * 60 * 1000);
+
+  // Single query: find episodes matching this storage key that haven't been flagged
   const matchingEpisodes = await db.select({ id: episodes.id })
     .from(episodes)
     .where(
       and(
         eq(episodes.storageCleared, false),
         isNull(episodes.firstDownloadedAt),
+        like(episodes.enclosureUrl, `%/storage/${storageKey}`),
       )
     );
 
-  const now = new Date();
-  const expiry = new Date(now.getTime() + STORAGE_TTL_DAYS * 24 * 60 * 60 * 1000);
+  if (matchingEpisodes.length === 0) return;
 
-  for (const ep of matchingEpisodes) {
-    // Check if this episode's enclosure URL contains our storage key
-    const fullEp = await db.select().from(episodes).where(eq(episodes.id, ep.id)).limit(1);
-    if (fullEp.length === 0) continue;
-    if (!fullEp[0].enclosureUrl?.includes(storageKey)) continue;
+  const ids = matchingEpisodes.map(ep => ep.id);
+  await db.update(episodes)
+    .set({
+      firstDownloadedAt: now,
+      storageExpiry: expiry,
+      updatedAt: now,
+    })
+    .where(inArray(episodes.id, ids));
 
-    await db.update(episodes)
-      .set({
-        firstDownloadedAt: now,
-        storageExpiry: expiry,
-        updatedAt: now,
-      })
-      .where(eq(episodes.id, ep.id));
-
-    storageLog.info({ episodeId: ep.id, storageExpiry: expiry.toISOString() },
-      'Episode flagged for storage cleanup in 7 days');
-  }
+  storageLog.info({ episodeIds: ids, storageExpiry: expiry.toISOString() },
+    'Episodes flagged for storage cleanup in 7 days');
 }

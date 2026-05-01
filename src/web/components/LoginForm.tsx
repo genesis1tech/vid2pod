@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth.js';
 
-export function LoginForm({ onLogin }: { onLogin: () => void }) {
+export function LoginForm({ onLogin }: { onLogin?: () => void }) {
   const { login, register } = useAuth();
   const [isRegister, setIsRegister] = useState(false);
   const [email, setEmail] = useState('');
@@ -20,7 +20,7 @@ export function LoginForm({ onLogin }: { onLogin: () => void }) {
       } else {
         await login(email, password);
       }
-      onLogin();
+      onLogin?.();
     } catch (err: any) {
       setError(err.message);
     } finally {

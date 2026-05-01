@@ -34,8 +34,7 @@ export async function normalize(opts: NormalizeOptions): Promise<string> {
 
   const stats = await analyzeLoudness(opts.inputPath, config);
   if (!stats) {
-    log.warn({ inputPath: opts.inputPath }, 'Could not analyze loudness, skipping normalization');
-    return opts.inputPath;
+    throw new AppError('Loudness analysis failed — cannot normalize audio', 500);
   }
 
   log.info({ stats, target: opts.targetLufs }, 'Loudness analysis complete');

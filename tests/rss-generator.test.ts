@@ -31,7 +31,7 @@ describe('RSS Generator', () => {
     expect(xml).toContain('<itunes:author>Test Author</itunes:author>');
     expect(xml).toContain('<itunes:type>episodic</itunes:type>');
     expect(xml).toContain('<itunes:category text="Technology"/>');
-    expect(xml).toContain('<itunes:explicit>no</itunes:explicit>');
+    expect(xml).toContain('<itunes:explicit>false</itunes:explicit>');
   });
 
   test('generates episodes with enclosure tags', () => {
@@ -209,5 +209,9 @@ describe('RSS Generator', () => {
     const xml = generateRssXml(feed);
     // When no websiteUrl, <link> should point to the feed URL
     expect(xml).toContain('<link>http://localhost:3000/feed/abc123.xml</link>');
+    // atom:link self-reference for RSS readers
+    expect(xml).toContain('<atom:link href="http://localhost:3000/feed/abc123.xml" rel="self" type="application/rss+xml"/>');
+    // atom namespace declared
+    expect(xml).toContain('xmlns:atom="http://www.w3.org/2005/Atom"');
   });
 });

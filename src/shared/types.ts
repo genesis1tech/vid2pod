@@ -23,7 +23,7 @@ export type FeedType = 'episodic' | 'serial';
 
 export type EpisodeType = 'full' | 'trailer' | 'bonus';
 
-export type EpisodeStatus = 'draft' | 'scheduled' | 'published' | 'retired';
+export type EpisodeStatus = 'draft' | 'scheduled' | 'publishing' | 'published' | 'retired';
 
 export type JobType = 'transcode' | 'normalize' | 'metadata' | 'artwork';
 
