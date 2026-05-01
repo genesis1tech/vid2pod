@@ -8,6 +8,7 @@ import pg from 'pg';
 const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
 await c.connect();
 await c.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS agent_last_seen TIMESTAMPTZ');
+await c.query('ALTER TABLE access_log ADD COLUMN IF NOT EXISTS episode_id UUID REFERENCES episodes(id)');
 await c.query(\`
   CREATE TABLE IF NOT EXISTS api_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
