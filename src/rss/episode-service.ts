@@ -1,14 +1,47 @@
 import { getDb } from '../db/client.js';
 import { episodes, assets, feeds, accessLog, youtubeMetadata, processingJobs } from '../db/schema.js';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, desc } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
 import { createChildLogger } from '../shared/logger.js';
-import { NotFoundError, ValidationError, LicenseError } from '../shared/errors.js';
+import { NotFoundError, ValidationError } from '../shared/errors.js';
 import { validateLicense } from '../licensing/service.js';
-import { deleteFile } from '../publishing/storage.js';
+import { deleteFile, deletePodcastFile } from '../publishing/storage.js';
 import type { EpisodeType, EpisodeStatus } from '../shared/types.js';
 
 const log = createChildLogger('episode-service');
+
+type AssetRow = typeof assets.$inferSelect;
+type EpisodeRow = typeof episodes.$inferSelect;
+
+function getPodcastStorageKey(url: string | null | undefined) {
+  if (!url) return null;
+  const marker = '/storage/';
+  const markerIndex = url.indexOf(marker);
+  if (markerIndex === -1) return null;
+  const key = url.slice(markerIndex + marker.length).split(/[?#]/, 1)[0];
+  return key || null;
+}
+
+async function deleteAssetStorage(asset: AssetRow | undefined, episode: EpisodeRow) {
+  const metadata = asset?.metadata as ({ processedKey?: string } & NonNullable<AssetRow['metadata']>) | null | undefined;
+  const podcastKeys = new Set<string>();
+
+  if (metadata?.processedKey) podcastKeys.add(metadata.processedKey);
+
+  const enclosureKey = getPodcastStorageKey(episode.enclosureUrl);
+  if (enclosureKey) podcastKeys.add(enclosureKey);
+
+  const imageKey = getPodcastStorageKey(episode.imageUrl);
+  if (imageKey) podcastKeys.add(imageKey);
+
+  if (asset?.storageKey) {
+    try { await deleteFile(asset.storageKey); } catch { /* best effort */ }
+  }
+
+  for (const key of podcastKeys) {
+    try { await deletePodcastFile(key); } catch { /* best effort */ }
+  }
+}
 
 export async function createEpisode(params: {
   feedId: string;
@@ -205,21 +238,17 @@ export async function deleteEpisode(userId: string, episodeId: string) {
         .limit(1);
 
       if (otherEpisodes.length === 0) {
+        // Fetch asset before dependent cleanup so storage cleanup still has keys.
+        const assetRows = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
+        const asset = assetRows[0];
+
         // Delete dependent records: youtube_metadata, processing_jobs
         await db.delete(youtubeMetadata).where(eq(youtubeMetadata.assetId, assetId));
         await db.delete(processingJobs).where(eq(processingJobs.assetId, assetId));
 
-        // Fetch asset for S3 cleanup
-        const assetRows = await db.select().from(assets).where(eq(assets.id, assetId)).limit(1);
-        const asset = assetRows[0];
-
-        // Delete S3 file (best effort)
-        if (asset?.storageKey) {
-          try { await deleteFile(asset.storageKey); } catch { /* best effort */ }
-        }
-
         // Delete the asset itself
         await db.delete(assets).where(eq(assets.id, assetId));
+        await deleteAssetStorage(asset, episode);
         log.info({ assetId }, 'Linked asset deleted');
       }
     } catch (err) {
