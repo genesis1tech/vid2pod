@@ -22,7 +22,30 @@ interface LoudnessStats {
   input_thresh: string;
 }
 
-function parseLoudnormStats(stderr: string): LoudnessStats | null {
+function isLoudnessStats(value: unknown): value is LoudnessStats {
+  if (!value || typeof value !== 'object') return false;
+  const stats = value as Record<string, unknown>;
+  return ['input_i', 'input_tp', 'input_lra', 'input_thresh'].every((key) => typeof stats[key] === 'string');
+}
+
+export function parseLoudnormStats(stderr: string): LoudnessStats | null {
+  const jsonMatch = stderr.match(/\{[\s\S]*?"input_i"[\s\S]*?\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (isLoudnessStats(parsed)) {
+        return {
+          input_i: parsed.input_i,
+          input_tp: parsed.input_tp,
+          input_lra: parsed.input_lra,
+          input_thresh: parsed.input_thresh,
+        };
+      }
+    } catch {
+      // Fall through to the text parser for older ffmpeg output.
+    }
+  }
+
   const match = stderr.match(/Parsed_loudnorm[^]*?I:\s*([-\d.]+)[^]*?TP:\s*([-\d.]+)[^]*?LRA:\s*([-\d.]+)[^]*?Threshold:\s*([-\d.]+)/);
   if (!match) return null;
   return { input_i: match[1], input_tp: match[2], input_lra: match[3], input_thresh: match[4] };
