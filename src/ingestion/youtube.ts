@@ -51,6 +51,8 @@ export async function addYouTubeVideo(params: {
     youtubeVideoId: videoId,
     streamUrl: `https://www.youtube.com/watch?v=${videoId}`,
     processingStatus: 'pending_download',
+    processingStage: 'waiting_for_download',
+    processingProgress: 5,
   }).returning();
 
   // Create draft episode linked to this asset

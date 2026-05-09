@@ -14,6 +14,7 @@ import { writeFile, readFile, unlink, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { v4 as uuid } from 'uuid';
+import type { ProcessingStage } from '../shared/types.js';
 
 const log = createChildLogger('jobs');
 
@@ -54,9 +55,24 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
     await validateLicense(asset.licenseId);
   }
 
-  await db.update(assets)
-    .set({ processingStatus: 'processing', updatedAt: new Date() })
-    .where(eq(assets.id, asset.id));
+  let lastProgress = -1;
+  let progressWrite = Promise.resolve();
+  const setProgress = (stage: ProcessingStage, progress: number) => {
+    const clamped = Math.max(0, Math.min(100, Math.round(progress)));
+    if (clamped <= lastProgress && stage !== 'failed') return progressWrite;
+    lastProgress = clamped;
+    progressWrite = progressWrite.then(() => db.update(assets)
+      .set({
+        processingStatus: stage === 'ready' ? 'completed' : stage === 'failed' ? 'failed' : 'processing',
+        processingStage: stage,
+        processingProgress: clamped,
+        updatedAt: new Date(),
+      })
+      .where(eq(assets.id, asset.id)).then(() => undefined));
+    return progressWrite;
+  };
+
+  await setProgress('queued', 20);
 
   let workDir: string | null = null;
 
@@ -65,6 +81,7 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
 
     // Download source audio from S3 (agent-uploaded or direct upload)
     if (asset.storageKey) {
+      await setProgress('loading_source', 25);
       workDir = join(tmpdir(), `vid2pod-${asset.id}`);
       await mkdir(workDir, { recursive: true });
       const { getFile } = await import('../publishing/storage.js');
@@ -77,6 +94,7 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
       inputPath = join(workDir, asset.originalFilename || 'input.mp3');
       await writeFile(inputPath, buffer);
     } else if (asset.sourceType === 'stream_url' && asset.streamUrl) {
+      await setProgress('loading_source', 25);
       workDir = join(tmpdir(), `vid2pod-${asset.id}`);
       await mkdir(workDir, { recursive: true });
       const response = await fetch(asset.streamUrl);
@@ -88,6 +106,7 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
       throw new Error('Asset has no storage key or stream URL');
     }
 
+    await setProgress('extracting_metadata', 35);
     const meta = await extractMetadata(inputPath);
 
     await db.update(assets)
@@ -100,11 +119,13 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
     const targetFormat = data.targetFormat || 'mp3';
     const outputPath = join(workDir!, `output.${targetFormat}`);
 
+    await setProgress('transcoding', 45);
     await transcode({
       inputPath,
       outputPath,
       format: targetFormat,
       bitrate: config.DEFAULT_BITRATE,
+      onProgress: (percent) => setProgress('transcoding', 45 + (percent * 0.2)),
     });
 
     const normalizedPath = join(workDir!, `normalized.${targetFormat}`);
@@ -112,8 +133,12 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
       inputPath: outputPath,
       outputPath: normalizedPath,
       targetLufs: config.DEFAULT_TARGET_LUFS,
+      onAnalysisStart: () => setProgress('analyzing_loudness', 68),
+      onAnalysisComplete: () => setProgress('normalizing', 76),
+      onProgress: (percent) => setProgress('normalizing', 76 + (percent * 0.12)),
     });
 
+    await setProgress('uploading', 92);
     const finalBuffer = await readFile(finalPath);
     const outputKey = `processed/${asset.userId}/${asset.id}/episode.${targetFormat}`;
     await uploadToPodcastBucket(outputKey, finalBuffer, targetFormat === 'mp3' ? 'audio/mpeg' : 'audio/mp4');
@@ -125,12 +150,9 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
       processedSize: finalBuffer.length,
     };
 
+    await setProgress('publishing', 96);
     await db.update(assets)
-      .set({
-        processingStatus: 'completed',
-        metadata: updatedMeta as any,
-        updatedAt: new Date(),
-      })
+      .set({ metadata: updatedMeta as any, updatedAt: new Date() })
       .where(eq(assets.id, asset.id));
 
     // Auto-publish: update linked episodes with enclosure info and publish
@@ -157,11 +179,10 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
         .where(eq(feeds.id, ep.feedId));
     }
 
+    await setProgress('ready', 100);
     log.info({ assetId: asset.id, episodesPublished: linkedEpisodes.length }, 'Asset processed and episodes auto-published');
   } catch (err) {
-    await db.update(assets)
-      .set({ processingStatus: 'failed', updatedAt: new Date() })
-      .where(eq(assets.id, asset.id));
+    await setProgress('failed', Math.max(lastProgress, 0));
     log.error({ err, assetId: asset.id }, 'Asset processing failed');
     throw err;
   } finally {

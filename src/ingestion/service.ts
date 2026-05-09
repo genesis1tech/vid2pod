@@ -37,6 +37,8 @@ export async function uploadAsset(params: {
     mimeType: params.mimeType,
     fileSizeBytes: params.fileBuffer.length,
     checksumSha256: checksum,
+    processingStage: 'queued',
+    processingProgress: 20,
   }).returning();
 
   log.info({ assetId: id, filename: params.filename, size: params.fileBuffer.length }, 'Asset uploaded');
@@ -73,6 +75,8 @@ export async function addStreamUrl(params: {
     streamUrl: params.streamUrl,
     originalFilename: params.filename || null,
     mimeType: response.headers.get('content-type') || null,
+    processingStage: 'queued',
+    processingProgress: 20,
   }).returning();
 
   log.info({ assetId: id, streamUrl: params.streamUrl }, 'Stream URL registered');

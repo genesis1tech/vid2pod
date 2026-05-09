@@ -66,6 +66,10 @@ export const assets = pgTable('assets', {
   processingStatus: text('processing_status', {
     enum: ['pending_download', 'pending', 'processing', 'completed', 'failed'],
   }).notNull().default('pending'),
+  processingStage: text('processing_stage', {
+    enum: ['waiting_for_download', 'queued', 'loading_source', 'extracting_metadata', 'transcoding', 'analyzing_loudness', 'normalizing', 'uploading', 'publishing', 'ready', 'failed'],
+  }).notNull().default('queued'),
+  processingProgress: integer('processing_progress').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

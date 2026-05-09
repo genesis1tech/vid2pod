@@ -14,6 +14,7 @@ export interface TranscodeOptions {
   format: 'mp3' | 'm4a';
   bitrate: number;
   sampleRate?: number;
+  onProgress?: (percent: number) => void | Promise<void>;
 }
 
 export async function transcode(opts: TranscodeOptions): Promise<string> {
@@ -29,7 +30,10 @@ export async function transcode(opts: TranscodeOptions): Promise<string> {
       .format(opts.format === 'mp3' ? 'mp3' : 'mp4')
       .on('start', (cmdLine) => log.info({ cmd: cmdLine }, 'Transcode started'))
       .on('progress', (progress) => {
-        if (progress.percent) log.debug({ percent: progress.percent }, 'Transcode progress');
+        if (progress.percent) {
+          log.debug({ percent: progress.percent }, 'Transcode progress');
+          void opts.onProgress?.(Math.min(100, Math.max(0, progress.percent)));
+        }
       })
       .on('end', () => {
         log.info({ outputPath: opts.outputPath }, 'Transcode completed');

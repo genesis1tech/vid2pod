@@ -125,9 +125,22 @@ async function populateEpisodeFromAsset(episode: any) {
 
 export async function listEpisodes(feedId: string) {
   const db = getDb();
-  return db.select().from(episodes)
+  const rows = await db.select({
+    episode: episodes,
+    assetProcessingStatus: assets.processingStatus,
+    processingStage: assets.processingStage,
+    processingProgress: assets.processingProgress,
+  }).from(episodes)
+    .leftJoin(assets, eq(episodes.assetId, assets.id))
     .where(eq(episodes.feedId, feedId))
     .orderBy(desc(episodes.sortOrder), desc(episodes.publishedAt));
+
+  return rows.map((row) => ({
+    ...row.episode,
+    assetProcessingStatus: row.assetProcessingStatus,
+    processingStage: row.processingStage,
+    processingProgress: row.processingProgress,
+  }));
 }
 
 export async function getEpisode(userId: string, episodeId: string) {

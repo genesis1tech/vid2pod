@@ -13,6 +13,9 @@ export interface NormalizeOptions {
   outputPath: string;
   targetLufs: number;
   truePeak?: number;
+  onAnalysisStart?: () => void | Promise<void>;
+  onAnalysisComplete?: () => void | Promise<void>;
+  onProgress?: (percent: number) => void | Promise<void>;
 }
 
 interface LoudnessStats {
@@ -55,12 +58,14 @@ export async function normalize(opts: NormalizeOptions): Promise<string> {
   const config = getConfig();
   const truePeak = opts.truePeak ?? -1.5;
 
+  await opts.onAnalysisStart?.();
   const stats = await analyzeLoudness(opts.inputPath, config);
   if (!stats) {
     throw new AppError('Loudness analysis failed — cannot normalize audio', 500);
   }
 
   log.info({ stats, target: opts.targetLufs }, 'Loudness analysis complete');
+  await opts.onAnalysisComplete?.();
 
   return applyNormalization(opts, stats, config);
 }
@@ -91,6 +96,11 @@ async function applyNormalization(opts: NormalizeOptions, stats: LoudnessStats, 
       .audioFilters(
         `loudnorm=I=${opts.targetLufs}:TP=${opts.truePeak ?? -1.5}:LRA=11:measured_I=${stats.input_i}:measured_TP=${stats.input_tp}:measured_LRA=${stats.input_lra}:measured_thresh=${stats.input_thresh}:linear=true`
       )
+      .on('progress', (progress) => {
+        if (progress.percent) {
+          void opts.onProgress?.(Math.min(100, Math.max(0, progress.percent)));
+        }
+      })
       .on('end', () => {
         log.info({ outputPath: opts.outputPath }, 'Normalization completed');
         resolve(opts.outputPath);

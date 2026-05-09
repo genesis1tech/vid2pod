@@ -15,6 +15,19 @@ export type AssetSourceType = 'audio_upload' | 'stream_url' | 'licensed_file';
 
 export type ProcessingStatus = 'pending_download' | 'pending' | 'processing' | 'completed' | 'failed';
 
+export type ProcessingStage =
+  | 'waiting_for_download'
+  | 'queued'
+  | 'loading_source'
+  | 'extracting_metadata'
+  | 'transcoding'
+  | 'analyzing_loudness'
+  | 'normalizing'
+  | 'uploading'
+  | 'publishing'
+  | 'ready'
+  | 'failed';
+
 export type FeedVisibility = 'public' | 'unlisted' | 'private';
 
 export type FeedAuthType = 'none' | 'basic_auth' | 'token';

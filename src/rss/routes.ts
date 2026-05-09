@@ -11,7 +11,7 @@ import {
 import { serveFeed } from '../publishing/feed-server.js';
 import { getPodcastFile, getPodcastFileInfo } from '../publishing/storage.js';
 import { getDb } from '../db/client.js';
-import { episodes } from '../db/schema.js';
+import { assets, episodes } from '../db/schema.js';
 import { eq, and, isNull, like, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { getConfig } from '../config.js';
@@ -142,6 +142,15 @@ export async function feedRoutes(app: FastifyInstance) {
 
   app.post('/api/v1/assets/:id/process', { preHandler: [authMiddleware] }, async (request) => {
     const { id } = request.params as { id: string };
+    const db = getDb();
+    await db.update(assets)
+      .set({
+        processingStatus: 'pending',
+        processingStage: 'queued',
+        processingProgress: 20,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(assets.id, id), eq(assets.userId, request.userId!)));
     const job = await enqueueProcessingJob({
       assetId: id,
       userId: request.userId!,
