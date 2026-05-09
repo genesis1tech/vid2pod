@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAuth, apiFetch } from '../hooks/useAuth.js';
 
 interface Episode {
@@ -11,6 +12,7 @@ interface Episode {
   durationSeconds: number | null;
   imageUrl: string | null;
   publishedAt: string | null;
+  libraryArchivedAt?: string | null;
   createdAt: string;
 }
 
@@ -92,6 +94,11 @@ function statusBadge(ep: Episode) {
 
 export function EpisodeList({ episodes, loading, onRefresh }: EpisodeListProps) {
   const { token } = useAuth();
+  const [showArchived, setShowArchived] = useState(false);
+
+  const activeEpisodes = episodes.filter((ep) => !ep.libraryArchivedAt);
+  const archivedEpisodes = episodes.filter((ep) => ep.libraryArchivedAt);
+  const visibleEpisodes = showArchived ? archivedEpisodes : activeEpisodes;
 
   const handleDelete = async (episodeId: string) => {
     if (!token) return;
@@ -102,6 +109,17 @@ export function EpisodeList({ episodes, loading, onRefresh }: EpisodeListProps) 
     } catch (err: any) {
       console.error('Failed to delete episode:', err.message);
       alert('Failed to remove: ' + err.message);
+    }
+  };
+
+  const handleArchive = async (episodeId: string) => {
+    if (!token) return;
+    try {
+      await apiFetch(`/api/v1/episodes/${episodeId}/archive`, token, { method: 'POST' });
+      onRefresh?.();
+    } catch (err: any) {
+      console.error('Failed to archive episode:', err.message);
+      alert('Failed to archive: ' + err.message);
     }
   };
 
@@ -121,9 +139,34 @@ export function EpisodeList({ episodes, loading, onRefresh }: EpisodeListProps) 
 
   return (
     <div>
-      <h2 className="font-semibold text-lg mb-3">Your Library</h2>
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h2 className="font-semibold text-lg">Your Library</h2>
+        {archivedEpisodes.length > 0 && (
+          <div className="flex rounded-md border border-(--color-border) overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowArchived(false)}
+              className={`px-3 py-1.5 text-xs ${!showArchived ? 'bg-(--color-primary) text-white' : 'bg-(--color-surface) text-(--color-text-muted)'}`}
+            >
+              Recent {activeEpisodes.length}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowArchived(true)}
+              className={`px-3 py-1.5 text-xs ${showArchived ? 'bg-(--color-primary) text-white' : 'bg-(--color-surface) text-(--color-text-muted)'}`}
+            >
+              Archived {archivedEpisodes.length}
+            </button>
+          </div>
+        )}
+      </div>
+      {visibleEpisodes.length === 0 ? (
+        <div className="card text-center py-6 text-(--color-text-muted)">
+          {showArchived ? 'No archived items.' : 'No recent items.'}
+        </div>
+      ) : (
       <div className="space-y-3">
-        {episodes.map((ep) => (
+        {visibleEpisodes.map((ep) => (
           <div key={ep.id} className="card flex gap-3 sm:gap-4">
             {/* Thumbnail (16:9 YouTube aspect ratio) */}
             {ep.imageUrl ? (
@@ -144,6 +187,15 @@ export function EpisodeList({ episodes, loading, onRefresh }: EpisodeListProps) 
                 <h3 className="font-medium text-sm sm:text-base leading-tight line-clamp-2">{ep.title}</h3>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   {statusBadge(ep)}
+                  {!showArchived && (
+                    <button
+                      onClick={() => handleArchive(ep.id)}
+                      className="text-xs text-(--color-text-muted) hover:text-(--color-text) hover:underline"
+                      title="Archive from library"
+                    >
+                      Archive
+                    </button>
+                  )}
                   <button
                     onClick={() => handleDelete(ep.id)}
                     className="text-xs text-(--color-danger) hover:underline"
@@ -175,6 +227,7 @@ export function EpisodeList({ episodes, loading, onRefresh }: EpisodeListProps) 
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }

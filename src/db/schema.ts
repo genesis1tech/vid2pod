@@ -156,6 +156,7 @@ export const episodes = pgTable('episodes', {
   firstDownloadedAt: timestamp('first_downloaded_at', { withTimezone: true }),
   storageExpiry: timestamp('storage_expiry', { withTimezone: true }),
   storageCleared: boolean('storage_cleared').notNull().default(false),
+  libraryArchivedAt: timestamp('library_archived_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

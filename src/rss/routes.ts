@@ -6,7 +6,7 @@ import {
 } from './feed-service.js';
 import {
   createEpisode, listEpisodes, getEpisode, updateEpisode,
-  publishEpisode, scheduleEpisode, deleteEpisode,
+  publishEpisode, scheduleEpisode, archiveEpisode, deleteEpisode,
 } from './episode-service.js';
 import { serveFeed } from '../publishing/feed-server.js';
 import { getPodcastFile, getPodcastFileInfo } from '../publishing/storage.js';
@@ -138,6 +138,11 @@ export async function feedRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string };
     const { scheduledAt } = request.body as { scheduledAt: string };
     return scheduleEpisode(request.userId!, id, scheduledAt);
+  });
+
+  app.post('/api/v1/episodes/:id/archive', { preHandler: [authMiddleware] }, async (request) => {
+    const { id } = request.params as { id: string };
+    return archiveEpisode(request.userId!, id);
   });
 
   app.post('/api/v1/assets/:id/process', { preHandler: [authMiddleware] }, async (request) => {

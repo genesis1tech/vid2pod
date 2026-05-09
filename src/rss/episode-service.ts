@@ -1,6 +1,6 @@
 import { getDb } from '../db/client.js';
 import { episodes, assets, feeds, accessLog, youtubeMetadata, processingJobs } from '../db/schema.js';
-import { eq, desc } from 'drizzle-orm';
+import { and, desc, eq, isNull, lt } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
 import { createChildLogger } from '../shared/logger.js';
 import { NotFoundError, ValidationError } from '../shared/errors.js';
@@ -9,6 +9,7 @@ import { deleteFile, deletePodcastFile } from '../publishing/storage.js';
 import type { EpisodeType, EpisodeStatus } from '../shared/types.js';
 
 const log = createChildLogger('episode-service');
+const LIBRARY_ARCHIVE_AFTER_DAYS = 5;
 
 type AssetRow = typeof assets.$inferSelect;
 type EpisodeRow = typeof episodes.$inferSelect;
@@ -125,6 +126,7 @@ async function populateEpisodeFromAsset(episode: any) {
 
 export async function listEpisodes(feedId: string) {
   const db = getDb();
+  await archiveStaleLibraryEpisodes(feedId);
   const rows = await db.select({
     episode: episodes,
     assetProcessingStatus: assets.processingStatus,
@@ -141,6 +143,19 @@ export async function listEpisodes(feedId: string) {
     processingStage: row.processingStage,
     processingProgress: row.processingProgress,
   }));
+}
+
+async function archiveStaleLibraryEpisodes(feedId: string) {
+  const db = getDb();
+  const cutoff = new Date(Date.now() - LIBRARY_ARCHIVE_AFTER_DAYS * 24 * 60 * 60 * 1000);
+  await db.update(episodes)
+    .set({ libraryArchivedAt: new Date(), updatedAt: new Date() })
+    .where(and(
+      eq(episodes.feedId, feedId),
+      eq(episodes.status, 'published'),
+      isNull(episodes.libraryArchivedAt),
+      lt(episodes.createdAt, cutoff),
+    ));
 }
 
 export async function getEpisode(userId: string, episodeId: string) {
@@ -223,6 +238,22 @@ export async function scheduleEpisode(userId: string, episodeId: string, schedul
     .returning();
 
   log.info({ episodeId, scheduledAt }, 'Episode scheduled');
+  return updated;
+}
+
+export async function archiveEpisode(userId: string, episodeId: string) {
+  const db = getDb();
+  await getEpisode(userId, episodeId);
+
+  const [updated] = await db.update(episodes)
+    .set({
+      libraryArchivedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(episodes.id, episodeId))
+    .returning();
+
+  log.info({ episodeId }, 'Episode archived from library');
   return updated;
 }
 

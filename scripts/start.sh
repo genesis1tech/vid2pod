@@ -11,9 +11,11 @@ await c.query('ALTER TABLE users ADD COLUMN IF NOT EXISTS agent_last_seen TIMEST
 await c.query('ALTER TABLE access_log ADD COLUMN IF NOT EXISTS episode_id UUID REFERENCES episodes(id)');
 await c.query(\"ALTER TABLE assets ADD COLUMN IF NOT EXISTS processing_stage TEXT NOT NULL DEFAULT 'queued'\");
 await c.query('ALTER TABLE assets ADD COLUMN IF NOT EXISTS processing_progress INTEGER NOT NULL DEFAULT 0');
+await c.query('ALTER TABLE episodes ADD COLUMN IF NOT EXISTS library_archived_at TIMESTAMPTZ');
 await c.query(\"UPDATE assets SET processing_stage = 'waiting_for_download', processing_progress = 5 WHERE processing_status = 'pending_download' AND processing_stage = 'queued'\");
 await c.query(\"UPDATE assets SET processing_stage = 'ready', processing_progress = 100 WHERE processing_status = 'completed' AND processing_stage = 'queued'\");
 await c.query(\"UPDATE assets SET processing_stage = 'failed' WHERE processing_status = 'failed' AND processing_stage = 'queued'\");
+await c.query(\"UPDATE episodes SET library_archived_at = NOW() WHERE library_archived_at IS NULL AND status = 'published' AND created_at < NOW() - INTERVAL '5 days'\");
 await c.query(\`
   CREATE TABLE IF NOT EXISTS api_tokens (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
