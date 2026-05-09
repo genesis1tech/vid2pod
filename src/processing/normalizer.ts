@@ -13,6 +13,9 @@ export interface NormalizeOptions {
   outputPath: string;
   targetLufs: number;
   truePeak?: number;
+  onAnalysisStart?: () => void | Promise<void>;
+  onAnalysisComplete?: () => void | Promise<void>;
+  onProgress?: (percent: number) => void | Promise<void>;
 }
 
 interface LoudnessStats {
@@ -22,7 +25,30 @@ interface LoudnessStats {
   input_thresh: string;
 }
 
-function parseLoudnormStats(stderr: string): LoudnessStats | null {
+function isLoudnessStats(value: unknown): value is LoudnessStats {
+  if (!value || typeof value !== 'object') return false;
+  const stats = value as Record<string, unknown>;
+  return ['input_i', 'input_tp', 'input_lra', 'input_thresh'].every((key) => typeof stats[key] === 'string');
+}
+
+export function parseLoudnormStats(stderr: string): LoudnessStats | null {
+  const jsonMatch = stderr.match(/\{[\s\S]*?"input_i"[\s\S]*?\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (isLoudnessStats(parsed)) {
+        return {
+          input_i: parsed.input_i,
+          input_tp: parsed.input_tp,
+          input_lra: parsed.input_lra,
+          input_thresh: parsed.input_thresh,
+        };
+      }
+    } catch {
+      // Fall through to the text parser for older ffmpeg output.
+    }
+  }
+
   const match = stderr.match(/Parsed_loudnorm[^]*?I:\s*([-\d.]+)[^]*?TP:\s*([-\d.]+)[^]*?LRA:\s*([-\d.]+)[^]*?Threshold:\s*([-\d.]+)/);
   if (!match) return null;
   return { input_i: match[1], input_tp: match[2], input_lra: match[3], input_thresh: match[4] };
@@ -32,12 +58,14 @@ export async function normalize(opts: NormalizeOptions): Promise<string> {
   const config = getConfig();
   const truePeak = opts.truePeak ?? -1.5;
 
+  await opts.onAnalysisStart?.();
   const stats = await analyzeLoudness(opts.inputPath, config);
   if (!stats) {
     throw new AppError('Loudness analysis failed — cannot normalize audio', 500);
   }
 
   log.info({ stats, target: opts.targetLufs }, 'Loudness analysis complete');
+  await opts.onAnalysisComplete?.();
 
   return applyNormalization(opts, stats, config);
 }
@@ -68,6 +96,11 @@ async function applyNormalization(opts: NormalizeOptions, stats: LoudnessStats, 
       .audioFilters(
         `loudnorm=I=${opts.targetLufs}:TP=${opts.truePeak ?? -1.5}:LRA=11:measured_I=${stats.input_i}:measured_TP=${stats.input_tp}:measured_LRA=${stats.input_lra}:measured_thresh=${stats.input_thresh}:linear=true`
       )
+      .on('progress', (progress) => {
+        if (progress.percent) {
+          void opts.onProgress?.(Math.min(100, Math.max(0, progress.percent)));
+        }
+      })
       .on('end', () => {
         log.info({ outputPath: opts.outputPath }, 'Normalization completed');
         resolve(opts.outputPath);

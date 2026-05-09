@@ -66,6 +66,10 @@ export const assets = pgTable('assets', {
   processingStatus: text('processing_status', {
     enum: ['pending_download', 'pending', 'processing', 'completed', 'failed'],
   }).notNull().default('pending'),
+  processingStage: text('processing_stage', {
+    enum: ['waiting_for_download', 'queued', 'loading_source', 'extracting_metadata', 'transcoding', 'analyzing_loudness', 'normalizing', 'uploading', 'publishing', 'ready', 'failed'],
+  }).notNull().default('queued'),
+  processingProgress: integer('processing_progress').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -152,6 +156,7 @@ export const episodes = pgTable('episodes', {
   firstDownloadedAt: timestamp('first_downloaded_at', { withTimezone: true }),
   storageExpiry: timestamp('storage_expiry', { withTimezone: true }),
   storageCleared: boolean('storage_cleared').notNull().default(false),
+  libraryArchivedAt: timestamp('library_archived_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [

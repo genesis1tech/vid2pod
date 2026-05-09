@@ -89,6 +89,8 @@ export async function ingestionRoutes(app: FastifyInstance) {
         mimeType: data.mimetype,
         fileSizeBytes: buffer.length,
         processingStatus: 'pending',
+        processingStage: 'queued',
+        processingProgress: 20,
         updatedAt: new Date(),
       })
       .where(eq(assets.id, assetId));
