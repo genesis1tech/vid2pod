@@ -45,6 +45,7 @@ async function deleteAssetStorage(asset: AssetRow | undefined, episode: EpisodeR
 }
 
 export async function createEpisode(params: {
+  userId: string;
   feedId: string;
   assetId?: string;
   title: string;
@@ -58,8 +59,17 @@ export async function createEpisode(params: {
 }) {
   const db = getDb();
 
+  // Verify the target feed belongs to the requesting user before creating an episode in it.
+  const feedRows = await db.select({ id: feeds.id }).from(feeds)
+    .where(and(eq(feeds.id, params.feedId), eq(feeds.userId, params.userId)))
+    .limit(1);
+  if (feedRows.length === 0) throw new NotFoundError('Feed');
+
   if (params.assetId) {
-    const assetRows = await db.select().from(assets).where(eq(assets.id, params.assetId)).limit(1);
+    // Scope the asset lookup to the user so one user cannot attach another user's asset.
+    const assetRows = await db.select().from(assets)
+      .where(and(eq(assets.id, params.assetId), eq(assets.userId, params.userId)))
+      .limit(1);
     if (assetRows.length === 0) throw new NotFoundError('Asset');
     const asset = assetRows[0];
 
@@ -124,8 +134,15 @@ async function populateEpisodeFromAsset(episode: any) {
   }).where(eq(episodes.id, episode.id));
 }
 
-export async function listEpisodes(feedId: string) {
+export async function listEpisodes(userId: string, feedId: string) {
   const db = getDb();
+
+  // Verify the feed belongs to the requesting user before listing its episodes.
+  const feedRows = await db.select({ id: feeds.id }).from(feeds)
+    .where(and(eq(feeds.id, feedId), eq(feeds.userId, userId)))
+    .limit(1);
+  if (feedRows.length === 0) throw new NotFoundError('Feed');
+
   await archiveStaleLibraryEpisodes(feedId);
   const rows = await db.select({
     episode: episodes,
@@ -176,6 +193,8 @@ export async function getEpisode(userId: string, episodeId: string) {
 
 export async function updateEpisode(userId: string, episodeId: string, updates: Record<string, any>) {
   const db = getDb();
+  // Verify ownership (throws NotFoundError if the episode is not the user's).
+  await getEpisode(userId, episodeId);
   const allowedFields = ['title', 'subtitle', 'description', 'seasonNumber', 'episodeNumber',
     'episodeType', 'explicit', 'imageUrl', 'sortOrder'];
   const filtered: Record<string, any> = {};
@@ -227,6 +246,8 @@ export async function publishEpisode(userId: string, episodeId: string) {
 
 export async function scheduleEpisode(userId: string, episodeId: string, scheduledAt: string) {
   const db = getDb();
+  // Verify ownership (throws NotFoundError if the episode is not the user's).
+  await getEpisode(userId, episodeId);
 
   const [updated] = await db.update(episodes)
     .set({

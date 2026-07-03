@@ -7,3 +7,11 @@ dist/
 coverage/
 .vitest/
 drizzle/meta/
+.gstack/
+
+# Local agent/tooling scratch — never publish
+.claude/worktrees/
+.missions/
+.playwright-mcp/
+coolify-current.png
+coolify-requests.txt
