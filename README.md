@@ -75,27 +75,22 @@ directly.
 git clone https://github.com/genesis1tech/vid2pod.git
 cd vid2pod
 npm install
-cp .env.example .env          # then fill in the values (see below)
 
-# Start infrastructure
-docker compose up -d postgres redis minio
-
-# Push the database schema
-npm run db:push
-
-# Start the API, worker, and web UI (separate terminals)
-npm run dev
-npm run dev:worker
-npm run dev:ui
+npm run setup   # starts Postgres/Redis/MinIO, writes .env (with a generated
+                # JWT secret), pushes the DB schema, and creates the buckets
+npm run dev     # runs the API, worker, and web UI together
 ```
 
 The app runs at `http://localhost:3000`. The MinIO console is at
 `http://localhost:9001`.
 
-Or run the whole stack with Docker:
+`npm run setup` is idempotent — re-run it any time; it won't overwrite an
+existing `.env`. To start the processes individually instead of all at once,
+use `npm run dev:api`, `npm run dev:worker`, and `npm run dev:ui`.
+
+Or run the whole stack in containers:
 
 ```bash
-cp .env.example .env
 docker compose up
 ```
 

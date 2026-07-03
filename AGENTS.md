@@ -24,12 +24,17 @@ Database tables: `users` → `api_tokens`, `licenses` → `assets` → `episodes
 ## Build, Test, and Development Commands
 
 ```bash
-# Development (run in separate terminals)
-npm run dev            # API server (Fastify, port 3000)
+# One-time setup: infra + .env + schema + buckets
+npm run setup
+
+# Development — runs API + worker + UI together
+npm run dev
+# ...or individually:
+npm run dev:api        # API server (Fastify, port 3000)
 npm run dev:worker     # BullMQ processing worker
 npm run dev:ui         # Frontend (Vite dev server)
 
-# Infrastructure
+# Infrastructure only
 docker compose up -d postgres redis minio
 
 # Database
