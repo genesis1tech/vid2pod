@@ -14,7 +14,7 @@ import { writeFile, readFile, unlink, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { sanitizeFilename } from '../shared/sanitize.js';
-import { assertPublicHttpUrl } from '../shared/url-guard.js';
+import { safeFetch } from '../shared/safe-fetch.js';
 import { v4 as uuid } from 'uuid';
 import type { ProcessingStage } from '../shared/types.js';
 
@@ -99,9 +99,9 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
       await setProgress('loading_source', 25);
       workDir = join(tmpdir(), `vid2pod-${asset.id}`);
       await mkdir(workDir, { recursive: true });
-      // Re-validate at fetch time to guard against SSRF / DNS rebinding.
-      await assertPublicHttpUrl(asset.streamUrl);
-      const response = await fetch(asset.streamUrl);
+      // safeFetch guards against SSRF and pins the connection to a validated
+      // public address, closing the DNS-rebinding window.
+      const response = await safeFetch(asset.streamUrl);
       if (!response.ok) throw new Error(`Failed to fetch stream: ${response.status}`);
       const buffer = Buffer.from(await response.arrayBuffer());
       inputPath = join(workDir, sanitizeFilename(asset.originalFilename, 'input.mp3'));
