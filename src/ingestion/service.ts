@@ -7,6 +7,8 @@ import { uploadFile, deleteFile } from '../publishing/storage.js';
 import { validateLicense } from '../licensing/service.js';
 import { createChildLogger } from '../shared/logger.js';
 import { NotFoundError, LicenseError, ValidationError } from '../shared/errors.js';
+import { sanitizeFilename } from '../shared/sanitize.js';
+import { assertPublicHttpUrl } from '../shared/url-guard.js';
 import type { AssetSourceType } from '../shared/types.js';
 
 const log = createChildLogger('ingestion');
@@ -18,12 +20,13 @@ export async function uploadAsset(params: {
   filename: string;
   mimeType: string;
 }) {
-  await validateLicense(params.licenseId);
+  await validateLicense(params.userId, params.licenseId);
 
   const db = getDb();
   const id = uuid();
   const checksum = createHash('sha256').update(params.fileBuffer).digest('hex');
-  const storageKey = `assets/${params.userId}/${id}/${params.filename}`;
+  const safeFilename = sanitizeFilename(params.filename);
+  const storageKey = `assets/${params.userId}/${id}/${safeFilename}`;
 
   await uploadFile(storageKey, params.fileBuffer, params.mimeType);
 
@@ -32,7 +35,7 @@ export async function uploadAsset(params: {
     userId: params.userId,
     licenseId: params.licenseId,
     sourceType: 'audio_upload' as AssetSourceType,
-    originalFilename: params.filename,
+    originalFilename: safeFilename,
     storageKey,
     mimeType: params.mimeType,
     fileSizeBytes: params.fileBuffer.length,
@@ -51,7 +54,10 @@ export async function addStreamUrl(params: {
   streamUrl: string;
   filename?: string;
 }) {
-  await validateLicense(params.licenseId);
+  await validateLicense(params.userId, params.licenseId);
+
+  // Prevent SSRF: only allow http(s) URLs that resolve to public addresses.
+  await assertPublicHttpUrl(params.streamUrl);
 
   let response: Response;
   try {
@@ -73,7 +79,7 @@ export async function addStreamUrl(params: {
     licenseId: params.licenseId,
     sourceType: 'stream_url' as AssetSourceType,
     streamUrl: params.streamUrl,
-    originalFilename: params.filename || null,
+    originalFilename: params.filename ? sanitizeFilename(params.filename) : null,
     mimeType: response.headers.get('content-type') || null,
     processingStage: 'queued',
     processingProgress: 20,
@@ -142,7 +148,7 @@ export async function fetchYouTubeMetadata(params: {
   licenseId: string;
   videoId: string;
 }) {
-  await validateLicense(params.licenseId);
+  await validateLicense(params.userId, params.licenseId);
 
   const db = getDb();
   const existing = await db.select().from(youtubeMetadata)

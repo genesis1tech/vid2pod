@@ -13,6 +13,8 @@ import { NotFoundError } from '../shared/errors.js';
 import { writeFile, readFile, unlink, mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import { tmpdir } from 'os';
+import { sanitizeFilename } from '../shared/sanitize.js';
+import { assertPublicHttpUrl } from '../shared/url-guard.js';
 import { v4 as uuid } from 'uuid';
 import type { ProcessingStage } from '../shared/types.js';
 
@@ -52,7 +54,7 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
   if (!asset) throw new NotFoundError('Asset');
 
   if (asset.licenseId) {
-    await validateLicense(asset.licenseId);
+    await validateLicense(asset.userId, asset.licenseId);
   }
 
   let lastProgress = -1;
@@ -91,16 +93,18 @@ export async function processAsset(data: ProcessingJobData): Promise<void> {
         chunks.push(chunk);
       }
       const buffer = Buffer.concat(chunks);
-      inputPath = join(workDir, asset.originalFilename || 'input.mp3');
+      inputPath = join(workDir, sanitizeFilename(asset.originalFilename, 'input.mp3'));
       await writeFile(inputPath, buffer);
     } else if (asset.sourceType === 'stream_url' && asset.streamUrl) {
       await setProgress('loading_source', 25);
       workDir = join(tmpdir(), `vid2pod-${asset.id}`);
       await mkdir(workDir, { recursive: true });
+      // Re-validate at fetch time to guard against SSRF / DNS rebinding.
+      await assertPublicHttpUrl(asset.streamUrl);
       const response = await fetch(asset.streamUrl);
       if (!response.ok) throw new Error(`Failed to fetch stream: ${response.status}`);
       const buffer = Buffer.from(await response.arrayBuffer());
-      inputPath = join(workDir, `input${asset.originalFilename ? '.' + asset.originalFilename.split('.').pop() : '.mp3'}`);
+      inputPath = join(workDir, sanitizeFilename(asset.originalFilename, 'input.mp3'));
       await writeFile(inputPath, buffer);
     } else {
       throw new Error('Asset has no storage key or stream URL');

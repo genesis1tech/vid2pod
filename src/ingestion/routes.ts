@@ -5,6 +5,7 @@ import { authMiddleware } from '../auth/middleware.js';
 import { z } from 'zod';
 import { ACCEPTED_AUDIO_TYPES, MAX_UPLOAD_SIZE } from '../shared/constants.js';
 import { ValidationError } from '../shared/errors.js';
+import { sanitizeFilename } from '../shared/sanitize.js';
 
 const addVideoSchema = z.object({
   url: z.string().url(),
@@ -78,14 +79,15 @@ export async function ingestionRoutes(app: FastifyInstance) {
 
     // Upload to storage
     const { uploadFile } = await import('../publishing/storage.js');
-    const storageKey = `assets/${request.userId}/${assetId}/${data.filename || 'audio.mp3'}`;
+    const safeFilename = sanitizeFilename(data.filename, 'audio.mp3');
+    const storageKey = `assets/${request.userId}/${assetId}/${safeFilename}`;
     await uploadFile(storageKey, buffer, data.mimetype);
 
     // Update asset — mark as pending (ready for server-side processing)
     await db.update(assets)
       .set({
         storageKey,
-        originalFilename: data.filename,
+        originalFilename: safeFilename,
         mimeType: data.mimetype,
         fileSizeBytes: buffer.length,
         processingStatus: 'pending',

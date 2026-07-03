@@ -70,7 +70,7 @@ export async function updateLicense(userId: string, licenseId: string, updates: 
 
   const [updated] = await db.update(licenses)
     .set({ ...updates, updatedAt: new Date() })
-    .where(eq(licenses.id, licenseId))
+    .where(and(eq(licenses.id, licenseId), eq(licenses.userId, userId)))
     .returning();
 
   log.info({ licenseId, updates: Object.keys(updates) }, 'License updated');
@@ -99,9 +99,13 @@ export async function revokeLicense(userId: string, licenseId: string) {
   log.info({ licenseId, affectedEpisodes: linkedEpisodes.length }, 'License revoked');
 }
 
-export async function validateLicense(licenseId: string): Promise<void> {
+export async function validateLicense(userId: string, licenseId: string): Promise<void> {
   const db = getDb();
-  const rows = await db.select().from(licenses).where(eq(licenses.id, licenseId)).limit(1);
+  // Scope the lookup to the owner so a user cannot attach or rely on another
+  // user's license by supplying its id.
+  const rows = await db.select().from(licenses)
+    .where(and(eq(licenses.id, licenseId), eq(licenses.userId, userId)))
+    .limit(1);
   const license = rows[0];
 
   if (!license) throw new LicenseError(`License ${licenseId} not found`);

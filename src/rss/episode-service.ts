@@ -77,7 +77,7 @@ export async function createEpisode(params: {
       throw new ValidationError('Asset must have an associated license before creating an episode');
     }
 
-    await validateLicense(asset.licenseId);
+    await validateLicense(params.userId, asset.licenseId);
 
     if (asset.processingStatus !== 'completed') {
       throw new ValidationError('Asset must be fully processed before creating an episode');
@@ -223,7 +223,7 @@ export async function publishEpisode(userId: string, episodeId: string) {
   if (episode.assetId) {
     const assetRows = await db.select().from(assets).where(eq(assets.id, episode.assetId)).limit(1);
     if (assetRows.length > 0 && assetRows[0].licenseId) {
-      await validateLicense(assetRows[0].licenseId);
+      await validateLicense(userId, assetRows[0].licenseId);
     }
   }
 
