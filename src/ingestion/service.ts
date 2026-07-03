@@ -8,7 +8,7 @@ import { validateLicense } from '../licensing/service.js';
 import { createChildLogger } from '../shared/logger.js';
 import { NotFoundError, LicenseError, ValidationError } from '../shared/errors.js';
 import { sanitizeFilename } from '../shared/sanitize.js';
-import { assertPublicHttpUrl } from '../shared/url-guard.js';
+import { safeFetch } from '../shared/safe-fetch.js';
 import type { AssetSourceType } from '../shared/types.js';
 
 const log = createChildLogger('ingestion');
@@ -56,13 +56,13 @@ export async function addStreamUrl(params: {
 }) {
   await validateLicense(params.userId, params.licenseId);
 
-  // Prevent SSRF: only allow http(s) URLs that resolve to public addresses.
-  await assertPublicHttpUrl(params.streamUrl);
-
-  let response: Response;
+  // Prevent SSRF: safeFetch only allows http(s) and pins the connection to a
+  // validated public address (blocks loopback/private/link-local/metadata).
+  let response: Awaited<ReturnType<typeof safeFetch>>;
   try {
-    response = await fetch(params.streamUrl, { method: 'HEAD' });
-  } catch {
+    response = await safeFetch(params.streamUrl, { method: 'HEAD' });
+  } catch (err) {
+    if (err instanceof ValidationError) throw err;
     throw new ValidationError('Cannot reach streaming URL');
   }
 
