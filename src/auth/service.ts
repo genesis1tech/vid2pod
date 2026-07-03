@@ -108,13 +108,10 @@ export async function login(email: string, password: string) {
 
   const rows = await db.select().from(users).where(eq(users.email, email)).limit(1);
   const user = rows[0];
-  if (!user) {
+  // Return an identical error for "no such user", "no password set", and "wrong
+  // password" so the endpoint does not disclose which emails have accounts.
+  if (!user || !user.passwordHash) {
     throw new AppError('Invalid credentials', 401, 'INVALID_CREDENTIALS');
-  }
-
-  if (!user.passwordHash) {
-    // Account was created during Clerk era or has no password set
-    throw new AppError('Password not set for this account. Please re-register.', 401, 'NO_PASSWORD');
   }
 
   const valid = await compare(password, user.passwordHash);

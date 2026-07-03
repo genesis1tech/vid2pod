@@ -32,6 +32,6 @@ describe('License validation', () => {
     const { getDb } = await import('../src/db/client.js');
     (getDb as ReturnType<typeof vi.fn>).mockReturnValue(db);
 
-    await expect(validateLicense('non-existent-id')).rejects.toThrow(LicenseError);
+    await expect(validateLicense('user-1', 'non-existent-id')).rejects.toThrow(LicenseError);
   });
 });
