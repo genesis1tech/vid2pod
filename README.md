@@ -174,19 +174,48 @@ npm run typecheck     # Type check
 - **Frontend:** React 19 + Vite 7 + Tailwind CSS v4
 - **CLI:** Commander.js
 
-## Personal use & YouTube's Terms
+## ⚠️ Personal use, YouTube's Terms & the law — read this
 
-Vid2Pod is a personal, self-hosted tool for shifting content **you already have
-access to** into a format that's easier to listen to. Downloading content from
-YouTube may conflict with the [YouTube Terms of
-Service](https://www.youtube.com/t/terms), and copyright law applies to whatever
-you download regardless of the tool you use to do it.
+**Please read this section before using Vid2Pod. It is not boilerplate.**
 
-You are responsible for how you use this software and for the content you run
-through it. Only use it with videos you have the right to download for personal
-use, and don't use it to redistribute other people's work. This project is
-provided as-is, with no warranty, and is not affiliated with YouTube or Google.
+Vid2Pod is published as an educational, self-hosted project. It is intended
+**only** for shifting content you already have a legitimate right to access into
+a format that is easier to listen to for your own personal use.
+
+Downloading content from YouTube generally **violates the [YouTube Terms of
+Service](https://www.youtube.com/t/terms)**, which prohibit downloading videos
+except where YouTube explicitly provides a download button or link (for example,
+YouTube Premium's offline feature). Using this tool to pull audio outside those
+paths is very likely a breach of those Terms, and doing so is entirely at your
+own risk — including the risk of losing access to your Google/YouTube account.
+
+Separately, **copyright law applies to everything you download**, independent of
+any tool. Most videos on YouTube are the copyrighted work of their creators.
+Downloading, keeping, or sharing that audio without permission or a valid legal
+basis may be **copyright infringement**, which can carry civil and in some cases
+criminal liability.
+
+By using this software you agree that:
+
+- You will use it **only** for content you own, have licensed, or otherwise have
+  a clear legal right to download for personal use.
+- You will **not** redistribute, publish, sell, or otherwise share content you
+  process with it. Feeds are private for a reason — keep them that way.
+- You are **solely responsible** for your use of this software and for complying
+  with YouTube's Terms, applicable copyright law, and the laws of your
+  jurisdiction.
+- You will not use it to circumvent paywalls, DRM, or access controls, or to
+  infringe anyone's rights.
+
+This project is provided **"as is", without warranty of any kind**, express or
+implied. The authors and contributors accept **no liability** for how you use
+it or for any consequences that result. It is **not affiliated with, endorsed
+by, or sponsored by YouTube, Google, or any content owner**. If you do not agree
+with these terms, do not use this software.
 
 ## License
 
-MIT
+MIT — see [the license section above](#️-personal-use-youtubes-terms--the-law--read-this)
+for important usage limitations that apply regardless of the software license.
+The MIT license covers the *code*; it does not grant you any rights to
+third-party *content* you process with it.
