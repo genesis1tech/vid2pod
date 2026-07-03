@@ -97,6 +97,12 @@ export function escapeXml(str: string): string {
     .replace(/'/g, '&apos;');
 }
 
+// Neutralize the CDATA terminator so user-controlled content cannot break out
+// of a CDATA section and inject arbitrary XML into the feed.
+export function escapeCdata(str: string): string {
+  return str.replace(/]]>/g, ']]]]><![CDATA[>');
+}
+
 export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
   const feed = normalizeFeed(feedRaw);
   const items = (episodesRaw ?? []).map(normalizeEpisode);
@@ -207,7 +213,7 @@ export function generateRssXml(feedRaw: any, episodesRaw?: any[]): string {
       xml += `      <itunes:image href="${escapeXml(ep.imageUrl)}"/>\n`;
     }
 
-    xml += `      <content:encoded><![CDATA[${ep.description}]]></content:encoded>\n`;
+    xml += `      <content:encoded><![CDATA[${escapeCdata(ep.description)}]]></content:encoded>\n`;
     xml += `    </item>\n`;
   }
 

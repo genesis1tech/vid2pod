@@ -103,13 +103,13 @@ export async function feedRoutes(app: FastifyInstance) {
   app.post('/api/v1/feeds/:feedId/episodes', { preHandler: [authMiddleware] }, async (request, reply) => {
     const { feedId } = request.params as { feedId: string };
     const body = createEpisodeSchema.parse(request.body);
-    const episode = await createEpisode({ feedId, ...body });
+    const episode = await createEpisode({ userId: request.userId!, feedId, ...body });
     return reply.status(201).send(episode);
   });
 
   app.get('/api/v1/feeds/:feedId/episodes', { preHandler: [authMiddleware] }, async (request) => {
     const { feedId } = request.params as { feedId: string };
-    return listEpisodes(feedId);
+    return listEpisodes(request.userId!, feedId);
   });
 
   app.get('/api/v1/episodes/:id', { preHandler: [authMiddleware] }, async (request) => {
