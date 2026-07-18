@@ -42,9 +42,29 @@ pub async fn upload_audio(
     if !res.status().is_success() {
         let status = res.status();
         let body = res.text().await.unwrap_or_default();
-        return Err(anyhow!("Upload failed: {} {}", status, body));
+        if status.as_u16() == 502 || status.as_u16() == 503 || status.as_u16() == 504 {
+            return Err(anyhow!(
+                "ViddyPod server is temporarily unavailable (HTTP {}). Retry in a moment.",
+                status.as_u16()
+            ));
+        }
+        if status.as_u16() == 404 {
+            return Err(anyhow!(
+                "Asset not found on server — it may have been deleted. Re-add the video and retry."
+            ));
+        }
+        let message = parse_api_error_message(&body).unwrap_or(body);
+        return Err(anyhow!("Upload failed: {} {}", status, message));
     }
 
     log::info!("Uploaded asset {} to server", asset_id);
     Ok(())
+}
+
+fn parse_api_error_message(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    value
+        .get("message")
+        .and_then(|m| m.as_str())
+        .map(str::to_string)
 }

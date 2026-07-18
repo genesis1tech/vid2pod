@@ -76,10 +76,19 @@ pub async fn run_poller(app: AppHandle, state: Arc<Mutex<AppState>>) {
 
 async fn fetch_pending(token: &str) -> anyhow::Result<Vec<PendingAsset>> {
     let url = format!("{}/api/v1/agent/pending", SERVER_URL);
-    let client = reqwest::Client::new();
-    let res = client.get(&url).bearer_auth(token).send().await?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()?;
+    let res = match client.get(&url).bearer_auth(token).send().await {
+        Ok(res) => res,
+        Err(e) => anyhow::bail!("Cannot reach ViddyPod server: {}", e),
+    };
     if !res.status().is_success() {
-        anyhow::bail!("HTTP {}", res.status());
+        let code = res.status().as_u16();
+        if code == 502 || code == 503 || code == 504 {
+            anyhow::bail!("ViddyPod server is temporarily unavailable (HTTP {})", code);
+        }
+        anyhow::bail!("HTTP {}", code);
     }
     let assets: Vec<PendingAsset> = res.json().await?;
     Ok(assets)

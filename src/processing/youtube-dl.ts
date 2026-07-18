@@ -4,6 +4,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { mkdir } from 'fs/promises';
 import { v4 as uuid } from 'uuid';
+import { getConfig } from '../config.js';
 import { createChildLogger } from '../shared/logger.js';
 
 const execFileAsync = promisify(execFile);
@@ -50,6 +51,8 @@ export async function downloadAudio(videoId: string): Promise<YtDlpResult> {
     '--write-info-json',
     '--no-playlist',
     '--no-overwrites',
+    '--no-update',
+    '--js-runtimes', 'deno',
     '--js-runtimes', 'node',
     '--remote-components', 'ejs:github',
   ];
@@ -67,8 +70,9 @@ export async function downloadAudio(videoId: string): Promise<YtDlpResult> {
 
   args.push(`https://www.youtube.com/watch?v=${videoId}`);
 
-  // Download audio-only, best quality, convert to mp3
-  await execFileAsync('yt-dlp', args, {
+  const ytDlpPath = getConfig().YT_DLP_PATH;
+  // Download audio-only, best quality
+  await execFileAsync(ytDlpPath, args, {
     cwd: workDir,
     timeout: 300_000, // 5 min timeout
   });

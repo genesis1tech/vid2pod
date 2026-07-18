@@ -96,6 +96,20 @@ export async function createServer(options?: { skipWebServing?: boolean }) {
 }
 
 if (process.argv[1]?.endsWith('index.ts') || process.argv[1]?.endsWith('index.js')) {
+  // Transient DB/network errors must not take down the whole API.
+  process.on('unhandledRejection', (reason) => {
+    log.error({ err: reason }, 'Unhandled promise rejection');
+  });
+  process.on('uncaughtException', (err) => {
+    log.error({ err: err.message, stack: err.stack }, 'Uncaught exception');
+    // Exit only for programmer errors; connection blips are logged above via
+    // the pg pool 'error' handler and scheduler try/catch.
+    if (err.message?.includes('Connection terminated') || err.message?.includes('ECONNRESET')) {
+      return;
+    }
+    process.exit(1);
+  });
+
   createServer().then(({ app }) => {
     const config = getConfig();
     app.listen({ port: config.PORT, host: '0.0.0.0' }, (err) => {

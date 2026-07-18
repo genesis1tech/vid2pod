@@ -111,6 +111,10 @@ async function downloadAudio(videoId) {
     '--write-info-json',
     '--no-playlist',
     '--no-overwrites',
+    '--no-update',
+    '--js-runtimes', 'deno',
+    '--js-runtimes', 'node',
+    '--remote-components', 'ejs:github',
     '--cookies-from-browser', BROWSER,
     `https://www.youtube.com/watch?v=${videoId}`,
   ], {

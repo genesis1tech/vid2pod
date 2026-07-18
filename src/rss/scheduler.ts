@@ -92,8 +92,14 @@ export function startScheduler(intervalMs?: number) {
   const interval = intervalMs ?? config.POLL_INTERVAL_MS;
 
   const tick = async () => {
-    await processScheduledEpisodes();
-    await cleanupExpiredStorage();
+    try {
+      await processScheduledEpisodes();
+      await cleanupExpiredStorage();
+    } catch (err) {
+      // Never let a DB blip kill the process via an unhandled rejection
+      // from setInterval's fire-and-forget async callback.
+      log.error({ err }, 'Scheduler tick failed');
+    }
   };
 
   const timer = setInterval(tick, interval);

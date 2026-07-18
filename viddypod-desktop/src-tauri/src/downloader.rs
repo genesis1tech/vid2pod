@@ -72,8 +72,8 @@ pub fn get_cookies_txt_path(app: &AppHandle) -> PathBuf {
         .join("cookies.txt")
 }
 
-/// Heuristic: does this yt-dlp error indicate the video needs authentication?
-fn is_auth_error(stderr: &str) -> bool {
+/// Heuristic: does this yt-dlp error indicate cookies / a fresher binary may help?
+fn is_cookie_retryable_error(stderr: &str) -> bool {
     let lower = stderr.to_lowercase();
     lower.contains("sign in to confirm")
         || lower.contains("age-restricted")
@@ -84,14 +84,19 @@ fn is_auth_error(stderr: &str) -> bool {
         || lower.contains("this video is available to this channel's members")
         || lower.contains("confirm your age")
         || lower.contains("inappropriate for some users")
+        // YouTube frequently returns 403 on media URLs when the extractor is
+        // stale or when SABR/PO-token gates kick in; cookies often unlock
+        // working formats.
+        || lower.contains("http error 403")
+        || lower.contains("403: forbidden")
 }
 
 /// Produce a friendly error message from yt-dlp's stderr when we've exhausted
 /// all download paths.
 fn humanize_final_error(stderr: &str) -> String {
     let lower = stderr.to_lowercase();
-    if is_auth_error(&lower) {
-        return "YouTube requires sign-in for this video. Install the ViddyPod browser extension and pair it to sync cookies, then retry.".to_string();
+    if is_cookie_retryable_error(&lower) {
+        return "YouTube blocked the download. Install the ViddyPod browser extension and pair it to sync cookies, then retry. If cookies are already synced, update the desktop agent (bundled yt-dlp must stay current).".to_string();
     }
     if lower.contains("video unavailable") || lower.contains("removed by the uploader") {
         return "This video is unavailable (removed, region-blocked, or made private).".to_string();
@@ -105,7 +110,7 @@ fn humanize_final_error(stderr: &str) -> String {
 }
 
 /// Download audio for a YouTube video. Tries cookieless first; if yt-dlp
-/// reports an auth-related failure, retries with a cookies.txt file if one
+/// reports an auth/403 failure, retries with a cookies.txt file if one
 /// has been written by the cookie-bridge server.
 ///
 /// This supersedes the old `--cookies-from-browser` flow which became
@@ -117,14 +122,14 @@ pub async fn download_audio(app: &AppHandle, video_id: &str) -> Result<DownloadR
         Ok(result) => Ok(result),
         Err(e) => {
             let msg = e.to_string();
-            if is_auth_error(&msg) {
-                log::info!("Cookieless download hit auth wall, retrying with cookies.txt");
+            if is_cookie_retryable_error(&msg) {
+                log::info!("Cookieless download blocked, retrying with cookies.txt");
                 let cookies_path = get_cookies_txt_path(app);
                 if cookies_path.exists() {
                     return run_yt_dlp(app, video_id, Some(&cookies_path)).await;
                 }
                 return Err(anyhow!(
-                    "YouTube requires sign-in for this video. Install the ViddyPod browser extension and pair it to sync cookies."
+                    "YouTube blocked the download. Install the ViddyPod browser extension and pair it to sync cookies, then retry."
                 ));
             }
             Err(e)
@@ -168,9 +173,14 @@ async fn run_yt_dlp(
         "--write-info-json".into(),
         "--no-playlist".into(),
         "--no-overwrites".into(),
-        // Required for YouTube JS n-sig challenges — yt-dlp uses node (bundled
-        // on Windows, system node on macOS/Linux via enriched PATH) to
-        // evaluate Chromium's obfuscated decipher code.
+        // Bundled binary can't self-update; suppress the 90-day age warning
+        // that otherwise pollutes user-facing errors.
+        "--no-update".into(),
+        // Required for YouTube JS n-sig challenges. Prefer deno when present
+        // (Homebrew installs it alongside yt-dlp); fall back to node (bundled
+        // on Windows, system node on macOS/Linux via enriched PATH).
+        "--js-runtimes".into(),
+        "deno".into(),
         "--js-runtimes".into(),
         "node".into(),
         "--remote-components".into(),
